@@ -1,22 +1,22 @@
 **TL;DR**
 
-- This guide moves a whole blog — a landing page, blog posts, authors, categories, and images — from **Contentful** to **Strapi v5**, with a runnable code example you can follow along with.
-- The migration is a small Node script. It reads a Contentful **export** file and writes to Strapi over the REST API. No vendor lock-in, no proprietary tool.
-- Three things make a CMS migration tricky, and we solve each one: **rich text** (Contentful's JSON tree becomes Markdown), **assets** (downloaded from Contentful's CDN and re-uploaded to Strapi), and **relations** (reconnected in a two-pass pass so nothing points at a record that doesn't exist yet).
-- Strapi v5 has a few sharp edges that trip up old tutorials: entries are addressed by `documentId`, you can't attach a file while creating an entry, and media fields are set by a numeric file id (not the relation `connect` syntax). We cover all three.
-- The full, working project lives in [`playground/`](./playground): a Strapi destination, scripts to seed a sample Contentful space, and the migration tool with a bundled sample export so you can run it immediately.
+- By the end, you'll have moved a whole blog — landing page, posts, authors, categories, and images — out of **Contentful** and into **Strapi**, and you'll have done it yourself.
+- You won't write migration code. You point an AI skill (for [Claude Code](https://claude.com/claude-code)) at your Contentful content, and it does the move for you.
+- Everything comes across: your formatted text, your images, and the links between things — which post belongs to which author and category, which posts are featured on the home page.
+- The real takeaway: with today's AI tools, leaving Contentful isn't a scary engineering project anymore. Anyone can do it.
+- The repo gives you a sample Contentful space to practice on plus the skill that does the migration, so you can try the whole thing start to finish.
 
-> **What this means (in my opinion).** As I write this, Contentful has [signed a definitive agreement to be acquired by Salesforce](https://www.contentful.com/blog/a-new-chapter-for-contentful/). My read on what that brings:
+> **Contentful is being acquired by Salesforce.** As I write this, Contentful has [signed a definitive agreement to be acquired by Salesforce](https://www.contentful.com/blog/a-new-chapter-for-contentful/). What that means, in my opinion:
 >
 > - **Distribution win for Contentful.** It rides Salesforce's enterprise machine — no separate procurement cycle, instant reach into big accounts.
 > - **Less of the developer-first "cool" Contentful** that people fell for. Acquired products tend to drift toward the parent company's priorities.
 > - **More expensive, and likely the end of self-serve.** Salesforce sells to enterprises, so expect pricing and focus to follow — and don't rule out them sunsetting Contentful entirely down the road. They did, after all, gut Heroku's beloved free tier after acquiring it.
 >
-> That's opinion and prediction, not prophecy. But if any of it rings true, the safe move is to make sure your content isn't locked into someone else's platform — which is exactly what this guide is about.
+> This is my opinion, not prediction But if any of it rings true, the safe move is to make sure your content isn't locked into someone else's platform — which is exactly what this guide is about.
 
 ## Why move from Contentful to Strapi?
 
-Contentful is a polished, hosted headless CMS. Teams usually start looking elsewhere for a few reasons: per-seat and per-record pricing that grows with the team, content-model limits on lower tiers, and the simple fact that you don't host your own data. [Strapi](https://strapi.io) is the most popular open-source alternative — you self-host it (or use Strapi Cloud), you own the database, and the REST and GraphQL APIs are yours to customize.
+Contentful is a hosted headless CMS. Teams usually start looking elsewhere for a few reasons: per-seat and per-record pricing that grows with the team, content-model limits on lower tiers, and the simple fact that you don't host your own data. [Strapi](https://strapi.io) is the most popular open-source alternative — you self-host it (or use Strapi Cloud), you own the database, and the REST and GraphQL APIs are yours to customize.
 
 As noted up top, the [Salesforce acquisition](https://www.contentful.com/blog/a-new-chapter-for-contentful/) only sharpens these reasons — co-founder Sascha Konietzke pitches Contentful's structured content as the layer for Salesforce's Agentforce, [writing that "AI agents now outnumber humans on the Web."](https://www.contentful.com/blog/a-new-chapter-for-contentful/) Whichever way that goes, owning your content keeps the choice yours.
 
@@ -44,7 +44,7 @@ flowchart LR
 ## Before you begin: set up your tools
 
 **Goal of this section:** get everything installed and authenticated so the later steps
-just work. None of it assumes you've used Contentful or Strapi before. Five steps.
+just work. None of it assumes you've used Contentful or Strapi before. Four steps.
 
 **1. Install Node.js (version 18.18 or newer).** The scripts use Node's built-in
 `fetch`, `FormData`, and `Blob`, which need a recent version. Download it from
@@ -67,11 +67,8 @@ Inside you'll find a `playground/` with three folders: `contentful-seed/` (the s
 **3. Create a free Contentful account.** Because Contentful is hosted, there's no local
 option — you need an account on their servers even to define a content model. Go to
 [contentful.com](https://www.contentful.com/), click **Sign up** (the free tier is plenty
-for this tutorial; no credit card required), and verify your email. Contentful usually
-creates a starter space for you during onboarding.
-
-You do **not** need to create a space or an API token by hand in the web UI — the CLI in
-step 4 handles both: it lists or creates your space, and generates the token when you log in.
+for this tutorial; no credit card required), and verify your email. That's all you need
+here — step 4 handles the space and token from the CLI.
 
 > Only doing the quick demo run? You can skip steps 3–4 entirely: the `migrate/` folder
 > ships with a sample export, so you don't need a Contentful account to watch the migration
@@ -94,9 +91,6 @@ contentful --version              # confirm it's on your PATH
 ```
 
 **4b — Log in.**
-[`contentful login`](https://www.contentful.com/developers/docs/tutorials/cli/authentication/)
-opens a browser; authorizing it **generates a Content Management token and stores it** in
-`~/.contentfulrc.json`:
 
 ```bash
 contentful login
@@ -108,46 +102,51 @@ A browser window will open where you will log in (or sign up if you don’t have
 
 Great! You've successfully logged in!
 ```
-**4c — Create a space for this example.** This tutorial seeds a specific set of sample
-content, so create a dedicated, clean space for it rather than mixing it into an existing
-one. The CLI creates the space and prints its **Space ID**; then make it active:
+
+**4c — Use your included space.** Contentful's [Free plan includes **1 Starter Space**](https://www.contentful.com/pricing/). List your spaces and set that one active:
 
 ```bash
-contentful space create --name "contentful-to-strapi-demo"   # prints the new Space ID
-contentful space use --space-id <id-printed-by-create>       # make it the active space
+contentful space list     # shows your space(s) and their IDs
+
+
+┌────────────┬──────────────┐
+│ Space name │ Space id     │
+├────────────┼──────────────┤
+│ Blank      │ pwomps5x1tsi │
+└────────────┴──────────────┘
 ```
 
-> Got more than one organization? `contentful space create` needs to know which — add
-> `--organization-id <id>` (list them with `contentful organization list`). On the free
-> tier you get a single space, so if `create` says you've hit the limit, delete an unused
-> space (or `contentful space use --space-id <id>` an existing empty one) and carry on.
+Use your id in next step.
+
+```
+contentful space use --space-id <id-from-list> # make it the active space
+```
+
+> **Heads up on `contentful space create`.** If you already have your one included space,
+> creating another is a paid action — the CLI warns _"adding new spaces … will result in
+> extra monthly charges"_ and asks you to confirm. On the Free plan, answer `n` and just
+> `space use` the space you already have. (If that space already holds content you care
+> about, note that the seed step adds the sample blog's content types and entries to it —
+> use a throwaway space if you'd rather keep them separate.)
 
 > **No global install?** Prefix every `contentful` command with `npx -y contentful-cli` —
-> e.g. `npx -y contentful-cli space create --name "contentful-to-strapi-demo"` — and skip step 4a.
+> e.g. `npx -y contentful-cli space list` — and skip step 4a.
 
-
-That's the whole auth setup. The seed and export scripts read those stored credentials
-automatically — **nothing to copy or paste.** (Prefer explicit credentials, e.g. for CI?
-Generate a personal token under **Settings → API keys → Content management tokens** and
-put it in `playground/contentful-seed/.env` as `CONTENTFUL_MANAGEMENT_TOKEN`; env values
-override the CLI config.)
-
-**5. Strapi needs nothing installed globally.** The `strapi-server/` project brings its
-own dependencies; you'll start it with `npm run develop` later. With Node, the code, a
-Contentful space, and the CLI logged in, you're ready.
+With Node, the code, and the CLI logged in against your space, you're ready to **seed your
+Contentful content — that's Part 1.** (We create the Strapi destination later, in Part 2.)
 
 ## How the two CMSes line up
 
 Before writing any code, map the concepts. Most of a migration is just deciding what becomes what.
 
-| Contentful | Strapi v5 | Notes |
-|---|---|---|
-| Content Type | Collection Type | A type with many entries (blog posts, authors). |
-| A single special entry | Single Type | One-of-a-kind content like the landing page. |
-| Entry | Document | In v5, the stable identity is the `documentId`. |
-| Asset (on the CDN) | Media (Upload library) | Must be re-uploaded; URLs change. |
-| Reference (Link) | Relation | Reconnected after entries exist. |
-| Rich Text (JSON AST) | Rich text (Markdown) | We convert the tree to Markdown. |
+| Contentful             | Strapi v5              | Notes                                           |
+| ---------------------- | ---------------------- | ----------------------------------------------- |
+| Content Type           | Collection Type        | A type with many entries (blog posts, authors). |
+| A single special entry | Single Type            | One-of-a-kind content like the landing page.    |
+| Entry                  | Document               | In v5, the stable identity is the `documentId`. |
+| Asset (on the CDN)     | Media (Upload library) | Must be re-uploaded; URLs change.               |
+| Reference (Link)       | Relation               | Reconnected after entries exist.                |
+| Rich Text (JSON AST)   | Rich text (Blocks)     | The skill converts the tree into Strapi's native block format. |
 
 For our blog that means four Strapi types: `blog-post`, `author`, and `category` as **collection types**, and `landing-page` as a **single type**.
 
@@ -181,19 +180,23 @@ gives the exact same model:
 // playground/contentful-seed/migrations/001-blog-model.js
 module.exports = function (migration) {
   const blogPost = migration
-    .createContentType('blogPost')
-    .name('Blog Post')
-    .displayField('title');
-  blogPost.createField('title').name('Title').type('Symbol').required(true);
-  blogPost.createField('slug').name('Slug').type('Symbol').required(true);
-  blogPost.createField('body').name('Body').type('RichText');
-  blogPost.createField('coverImage').name('Cover Image').type('Link').linkType('Asset');
+    .createContentType("blogPost")
+    .name("Blog Post")
+    .displayField("title");
+  blogPost.createField("title").name("Title").type("Symbol").required(true);
+  blogPost.createField("slug").name("Slug").type("Symbol").required(true);
+  blogPost.createField("body").name("Body").type("RichText");
   blogPost
-    .createField('author')
-    .name('Author')
-    .type('Link')
-    .linkType('Entry')
-    .validations([{ linkContentType: ['author'] }]);
+    .createField("coverImage")
+    .name("Cover Image")
+    .type("Link")
+    .linkType("Asset");
+  blogPost
+    .createField("author")
+    .name("Author")
+    .type("Link")
+    .linkType("Entry")
+    .validations([{ linkContentType: ["author"] }]);
   // ...author, category, landingPage defined the same way
 };
 ```
@@ -206,7 +209,7 @@ npm run model     # contentful space migration migrations/001-blog-model.js
 
 **Step 1.3 — Seed the entries and assets.** This creates and publishes the sample
 content with the `contentful-management` SDK. The detail to know: content is created as a
-*draft* and must be published before an export (or the Delivery API) will see it.
+_draft_ and must be published before an export (or the Delivery API) will see it.
 
 ```bash
 npm run seed
@@ -217,10 +220,10 @@ Under the hood each entry is created and then published:
 ```js
 // playground/contentful-seed/seed.mjs (simplified)
 const client = contentful.createClient({ accessToken: TOKEN });
-const env = await (await client.getSpace(SPACE_ID)).getEnvironment('master');
+const env = await (await client.getSpace(SPACE_ID)).getEnvironment("master");
 
-let entry = await env.createEntryWithId('author', 'author-jane', {
-  fields: { name: { 'en-US': 'Jane Doe' } },
+let entry = await env.createEntryWithId("author", "author-jane", {
+  fields: { name: { "en-US": "Jane Doe" } },
 });
 await entry.publish();
 ```
@@ -238,73 +241,46 @@ That `export.json` (written into `../migrate/sample-data/`) is the input to the 
 (The example repo ships one already, so you can skip straight to Part 3 if you just want to
 see the migration run.)
 
-## Part 2 — Model the blog in Strapi v5
+## Part 2 — Migrate into Strapi with the skill
 
-**Goal of this section:** stand up the destination — a running Strapi v5 instance with
-content types that match the Contentful model, plus an API token the migration can use.
+**Goal of this section:** stand up a Strapi v5 project and hand the migration to the
+**`contentful-to-strapi-migration` skill**. You point it at the export from Part 1; it reads
+your content model, creates matching content types in Strapi (rich text as the native
+**Blocks** editor), builds the migration for *your* data, and runs it.
 
-**Step 2.1 — Start the Strapi project.** The example ships one in `playground/strapi-server`.
-Copy the env file before starting — Strapi won't boot without it (you'll get
-*"App keys are required"*):
-
-```bash
-cd playground/strapi-server
-npm install
-cp .env.example .env      # required — supplies APP_KEYS and the other secrets
-npm run develop           # first launch prompts you to create an admin user
-```
-
-Leave it running. The admin panel is at `http://localhost:1337/admin`. (The bundled
-`.env.example` has working local-dev secrets; regenerate them for any real deployment.)
-
-**Step 2.2 — Know the content types you're matching.** The project already defines them;
-the key modeling choices are: 
-
-- `body` is a **Rich text (Markdown)** field. Contentful rich text doesn't map cleanly onto Strapi's block editor, and Markdown is a lossless, portable target. (If you need the block editor, you can convert further — see the rich-text section below.)
-- `landing-page` is a **single type**.
-- `coverImage`, `avatar`, and `heroImage` are single **media** fields.
-- `author` and `category` are **relations**; `featuredPosts` on the landing page is a many-to-many relation to posts.
-- Every type gets that `contentfulId` string field.
-
-Here's the blog-post schema:
-
-```json
-// playground/strapi-server/src/api/blog-post/content-types/blog-post/schema.json
-{
-  "kind": "collectionType",
-  "info": { "singularName": "blog-post", "pluralName": "blog-posts", "displayName": "Blog Post" },
-  "options": { "draftAndPublish": true },
-  "attributes": {
-    "title": { "type": "string", "required": true },
-    "slug": { "type": "uid", "targetField": "title", "required": true },
-    "excerpt": { "type": "text" },
-    "body": { "type": "richtext" },
-    "coverImage": { "type": "media", "multiple": false, "allowedTypes": ["images"] },
-    "publishedDate": { "type": "date" },
-    "tags": { "type": "json" },
-    "contentfulId": { "type": "string" },
-    "author": { "type": "relation", "relation": "manyToOne", "target": "api::author.author", "inversedBy": "posts" },
-    "category": { "type": "relation", "relation": "manyToOne", "target": "api::category.category", "inversedBy": "posts" }
-  }
-}
-```
-
-**Step 2.3 — Create a write API token.** The migration authenticates with it. In the admin
-panel go to **Settings → API Tokens → Create new API Token**, set the type to *Full access*,
-and copy the token (it's shown once). Prefer the terminal? Mint one headlessly:
+**Step 2.1 — Create a Strapi project.** Use Strapi's official generator:
 
 ```bash
-node scripts/create-api-token.mjs    # prints a full-access token
+npx create-strapi-app@latest my-strapi-blog --skip-cloud --no-example
+cd my-strapi-blog
+npm run develop      # creates its .env, then prompts you to create an admin user
 ```
 
-The example also grants the Public role read access to the migrated types automatically on
-boot, so you can verify the result with a plain `curl` and no login.
+Leave it running — the admin panel is at `http://localhost:1337/admin`.
+
+**Step 2.2 — Run the skill.** Open the project in [Claude Code](https://claude.com/claude-code).
+The repo ships the skill at `.claude/skills/contentful-to-strapi-migration/`, so it's
+available automatically — just ask, pointing at your Part 1 export:
+
+> Use the contentful-to-strapi-migration skill to migrate my Contentful export at
+> `playground/contentful-seed/export/export.json` into this Strapi project.
+
+Here's what the skill does for you, start to finish:
+
+1. **Reads your Contentful model** from the export — every content type, field, and relationship.
+2. **Creates matching Strapi content types**, picking the right field for each: a **Rich text (Blocks)** field for rich text, single **media** fields for images, **relations** for references, a **single type** for one-off pages like the landing page, and a `contentfulId` on every type so the migration can re-run safely. (For our sample that's `blog-post`, `author`, `category`, and a `landing-page` single type.)
+3. **Sets up access** — a write API token plus public read on the new types, so you can check the result with a plain `curl`.
+4. **Builds the migration for your data** on top of a tested engine (rich-text→Blocks conversion, asset upload, a Strapi REST client) that ships with the skill, then **runs it** and prints a summary of what moved.
+
+Because it works from *your* model, the skill isn't limited to this blog — point it at any
+Contentful space and it shapes both the Strapi content types and the migration to match.
+That's the whole idea: the skill *builds* the migration, you don't hand-write one.
 
 ## Part 3 — The migration
 
 **Goal of this section:** run the migration so the exported Contentful content lands in
 Strapi — and understand what it's doing while it runs. (The exact commands to run it are in
-the next two sections; here we cover *how* it works.)
+the next two sections; here we cover _how_ it works.)
 
 The script does its work in passes. The reason is relations: you can't tell a blog post who its author is until that author exists in Strapi and has a `documentId`. So we create everything first, remember the old-id → new-id mapping, and wire up the connections in a second pass.
 
@@ -322,11 +298,11 @@ The orchestration reads cleanly once the helpers are in place:
 // playground/migrate/migrate.js (excerpt)
 // Pass 1: create the post, no relations yet
 const rec = await upsert(COLLECTION.blogPost, cfId, {
-  title: field(entry, 'title', locale),
-  slug: field(entry, 'slug', locale),
-  body: richTextToMarkdown(field(entry, 'body', locale), { resolveAsset }),
-  coverImage: mediaValue(linkId(field(entry, 'coverImage', locale))),
-  tags: field(entry, 'tags', locale),
+  title: field(entry, "title", locale),
+  slug: field(entry, "slug", locale),
+  body: richTextToMarkdown(field(entry, "body", locale), { resolveAsset }),
+  coverImage: mediaValue(linkId(field(entry, "coverImage", locale))),
+  tags: field(entry, "tags", locale),
   contentfulId: cfId,
 });
 idMap.blogPost.set(cfId, rec.documentId);
@@ -349,7 +325,11 @@ Contentful stores rich text as a JSON tree (an AST), not as HTML or Markdown. A 
   "nodeType": "paragraph",
   "content": [
     { "nodeType": "text", "value": "Astro renders to ", "marks": [] },
-    { "nodeType": "text", "value": "static HTML", "marks": [{ "type": "bold" }] }
+    {
+      "nodeType": "text",
+      "value": "static HTML",
+      "marks": [{ "type": "bold" }]
+    }
   ]
 }
 ```
@@ -360,12 +340,15 @@ To put that in a Strapi Markdown field, we walk the tree and emit Markdown. The 
 // playground/migrate/lib/richtext.js (excerpt)
 function renderNode(node, ctx) {
   switch (node.nodeType) {
-    case 'paragraph':  return `${renderChildren(node.content, ctx)}\n\n`;
-    case 'heading-2':  return `## ${renderChildren(node.content, ctx)}\n\n`;
-    case 'text':       return applyMarks(node.value, node.marks); // **bold**, _italic_, `code`
-    case 'embedded-asset-block': {
+    case "paragraph":
+      return `${renderChildren(node.content, ctx)}\n\n`;
+    case "heading-2":
+      return `## ${renderChildren(node.content, ctx)}\n\n`;
+    case "text":
+      return applyMarks(node.value, node.marks); // **bold**, _italic_, `code`
+    case "embedded-asset-block": {
       const asset = ctx.resolveAsset(node.data?.target?.sys?.id);
-      return asset ? `![${asset.alt ?? ''}](${asset.url})\n\n` : '';
+      return asset ? `![${asset.alt ?? ""}](${asset.url})\n\n` : "";
     }
     // headings, lists, blockquote, hyperlink, hr...
   }
@@ -374,7 +357,7 @@ function renderNode(node, ctx) {
 
 The subtle case is `embedded-asset-block` — an image dropped into the body. The AST only references the asset by its Contentful id, and that image is being re-uploaded to Strapi, so its URL is changing. We resolve the id through the asset map built in Pass 0, which rewrites `![](...)` to the new Strapi URL. Miss this and every in-body image 404s after the migration.
 
-If your content uses tables or embedded *entries* (not just assets), extend the `switch`, or render to HTML with [`@contentful/rich-text-html-renderer`](https://www.npmjs.com/package/@contentful/rich-text-html-renderer) and store HTML instead.
+If your content uses tables or embedded _entries_ (not just assets), extend the `switch`, or render to HTML with [`@contentful/rich-text-html-renderer`](https://www.npmjs.com/package/@contentful/rich-text-html-renderer) and store HTML instead.
 
 ### Hard part 2 — Assets: download, then re-upload
 
@@ -384,23 +367,31 @@ Contentful assets live on its CDN. Strapi needs its own copy, so for each asset 
 
 ```js
 // playground/migrate/lib/assets.js (excerpt)
-const bytes = await loadBytes({ url: file.url, assetsDir });   // local file or CDN
+const bytes = await loadBytes({ url: file.url, assetsDir }); // local file or CDN
 const blob = new Blob([bytes], { type: file.contentType });
 const uploaded = await strapi.upload(blob, fileName, {
   name: fileName,
   alternativeText: description || title,
 });
 // remember: contentful asset id -> { strapi file id, new url }
-map.set(cfId, { id: uploaded.id, url: uploaded.url, alt: uploaded.alternativeText });
+map.set(cfId, {
+  id: uploaded.id,
+  url: uploaded.url,
+  alt: uploaded.alternativeText,
+});
 ```
 
 The upload itself is a `multipart/form-data` POST:
 
 ```js
 const form = new FormData();
-form.append('files', blob, fileName);
-form.append('fileInfo', JSON.stringify(fileInfo));
-await fetch(`${baseUrl}/api/upload`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+form.append("files", blob, fileName);
+form.append("fileInfo", JSON.stringify(fileInfo));
+await fetch(`${baseUrl}/api/upload`, {
+  method: "POST",
+  headers: { Authorization: `Bearer ${token}` },
+  body: form,
+});
 ```
 
 Two things worth knowing from real migrations:
@@ -415,7 +406,7 @@ Contentful references point at other entries by id. Recreate the posts before th
 Two Strapi v5 details are easy to get wrong, and I got both wrong first:
 
 - **Entry relations** use the `connect`/`set` syntax with the target's **`documentId`** (a string), e.g. `{ author: { set: ['abc123…'] } }`. Use `set` rather than `connect` so re-running replaces instead of piling on.
-- **Media fields are different.** A single media field is set with the **numeric file id directly** — `{ coverImage: 12 }` — *not* `{ coverImage: { connect: [12] } }`. The `connect` form is silently ignored for media, and your images quietly never link. This one cost me a debugging session.
+- **Media fields are different.** A single media field is set with the **numeric file id directly** — `{ coverImage: 12 }` — _not_ `{ coverImage: { connect: [12] } }`. The `connect` form is silently ignored for media, and your images quietly never link. This one cost me a debugging session.
 
 ## The Strapi v5 gotchas, in one place
 
@@ -463,7 +454,7 @@ Open one post's `body` and confirm the in-text image points at a `/uploads/...` 
 
 ## The whole run, in order
 
-Here's the complete sequence in one place — the real migration of your *own* Contentful
+Here's the complete sequence in one place — the real migration of your _own_ Contentful
 space (not the bundled sample). Each command maps back to the step that explains it. Run
 the tool setup first ([Before you begin](#before-you-begin-set-up-your-tools)), then:
 
@@ -513,7 +504,7 @@ skill's `templates/`), adapt the field mapping, run it, and verify.
 > **Heads up — this skill is a demo.** It encodes the exact blog model from this post
 > (posts, authors, categories, a landing page). It is meant as a starting point, not a
 > one-size-fits-all migrator. Copy it, change the `COLLECTION` map and field builders to
-> match *your* content types, and make it yours — skills are designed to be forked and
+> match _your_ content types, and make it yours — skills are designed to be forked and
 > adapted to your use case.
 
 New to agent skills? Strapi has a friendly primer on what they are and how to build one:
@@ -529,7 +520,7 @@ of these the hard way on a ~2,000-entry migration):
 
 - **No `contentfulId` field.** Without it there's no way to match a Strapi record back to
   its Contentful source, so re-runs create duplicates instead of updating. Add it to every
-  type *before* the first import.
+  type _before_ the first import.
 - **Mismatched field names and types.** Strapi and Contentful disagree about required
   fields, data types, and how relations nest. The closer your Strapi model mirrors the
   Contentful one, the less mapping code you write and the fewer surprises you hit.
@@ -538,7 +529,7 @@ of these the hard way on a ~2,000-entry migration):
 - **Circular relations.** A → B → A will loop a naive importer forever. The fix is the
   two-pass approach: create every entry first, then resolve relations one level deep so you
   never recurse.
-- **Big-bang migrations.** Don't run the whole thing once and hope. Migrate a *subset*
+- **Big-bang migrations.** Don't run the whole thing once and hope. Migrate a _subset_
   first (one content type, or a handful of ids), check it, fix your mapping, and re-run.
   Idempotency is what makes that iteration safe.
 
