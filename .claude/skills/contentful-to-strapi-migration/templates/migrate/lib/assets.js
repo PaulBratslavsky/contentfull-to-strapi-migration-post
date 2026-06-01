@@ -70,7 +70,10 @@ export async function migrateAssets(assets, { strapi, assetsDir, locale, log = (
     // Idempotency: reuse a previously uploaded file with the same name.
     const existing = await strapi.findUploadByName(fileName);
     if (existing) {
-      map.set(cfId, { id: existing.id, url: existing.url, alt: existing.alternativeText || title });
+      // Store the full media object: entries link it by id, and the Blocks
+      // rich-text converter embeds the whole object in image blocks.
+      if (!existing.alternativeText) existing.alternativeText = title;
+      map.set(cfId, existing);
       log(`  = asset ${fileName} already uploaded (id ${existing.id})`);
       continue;
     }
@@ -83,7 +86,7 @@ export async function migrateAssets(assets, { strapi, assetsDir, locale, log = (
       caption: title,
     });
 
-    map.set(cfId, { id: uploaded.id, url: uploaded.url, alt: uploaded.alternativeText || title });
+    map.set(cfId, uploaded);
     log(`  + uploaded ${fileName} -> id ${uploaded.id}`);
   }
 

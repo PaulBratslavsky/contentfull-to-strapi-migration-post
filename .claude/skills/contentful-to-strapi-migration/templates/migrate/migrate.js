@@ -8,7 +8,7 @@ import {
   linkId,
   linkIds,
 } from './lib/contentful.js';
-import { richTextToMarkdown } from './lib/richtext.js';
+import { richTextToBlocks } from './lib/richtext.js';
 import { migrateAssets } from './lib/assets.js';
 import { StrapiClient } from './lib/strapi.js';
 
@@ -70,10 +70,9 @@ async function main() {
   });
   counts.assets = assetMap.size;
 
-  const resolveAsset = (cfAssetId) => {
-    const a = assetMap.get(cfAssetId);
-    return a ? { url: a.url, alt: a.alt } : null;
-  };
+  // Resolve a Contentful asset id to the full Strapi media object — the Blocks
+  // rich-text converter embeds it directly in image blocks.
+  const resolveAsset = (cfAssetId) => assetMap.get(cfAssetId) ?? null;
 
   // Idempotent create-or-update keyed by contentfulId.
   async function upsert(plural, contentfulId, payload) {
@@ -118,7 +117,7 @@ async function main() {
 
   for (const entry of entriesOfType(data, 'blogPost')) {
     const cfId = entry.sys.id;
-    const body = richTextToMarkdown(field(entry, 'body', locale), { resolveAsset });
+    const body = richTextToBlocks(field(entry, 'body', locale), { resolveAsset });
     const rec = await upsert(COLLECTION.blogPost, cfId, {
       title: field(entry, 'title', locale),
       slug: field(entry, 'slug', locale),

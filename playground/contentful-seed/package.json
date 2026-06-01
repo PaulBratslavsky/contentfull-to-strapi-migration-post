@@ -7,7 +7,7 @@
   "scripts": {
     "model": "contentful space migration --yes migrations/001-blog-model.js",
     "seed": "node seed.mjs",
-    "export": "contentful space export --content-file ../migrate/sample-data/export.json --download-assets --export-dir ../migrate/sample-data"
+    "export": "contentful space export --content-file ./export/export.json --download-assets --export-dir ./export"
   },
   "engines": {
     "node": ">=18.18.0"

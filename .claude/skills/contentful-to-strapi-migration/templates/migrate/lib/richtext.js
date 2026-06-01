@@ -1,126 +1,186 @@
 /**
- * Convert a Contentful Rich Text document (a JSON AST) into Markdown.
+ * Convert a Contentful Rich Text document (a JSON AST) into Strapi's
+ * **Rich text (Blocks)** format — the native block editor structure.
  *
- * Contentful stores rich text as a tree of nodes:
+ * Contentful stores rich text as a tree:
  *   { nodeType: "document", content: [ { nodeType: "paragraph", content: [...] }, ... ] }
  * Text nodes carry formatting in a `marks` array ([{ type: "bold" }, ...]).
  *
- * Strapi's "Rich text (Markdown)" field just wants a Markdown string, so we walk
- * the tree and emit Markdown. Embedded assets are the interesting case: the AST
- * only references the asset by id, so we resolve it through `resolveAsset(id)`
- * to the URL the asset now lives at *in Strapi* (it was re-uploaded first).
+ * Strapi's Blocks field stores an ARRAY of block nodes, each with a `type` and
+ * `children`. Block types: paragraph, heading (+level), list (+format) of
+ * list-item, quote, code, image (+image media object); inline: text (with
+ * bold/italic/underline/strikethrough/code flags) and link (+url). This walks
+ * the Contentful tree and emits that shape.
  *
- * This is intentionally a compact, readable converter rather than an exhaustive
- * one — it covers the nodes a typical blog body uses. For exotic content
- * (tables, deeply nested entries) extend the switch below or reach for
- * @contentful/rich-text-html-renderer and store HTML instead.
+ * Embedded assets are the interesting case: the AST references the asset by id,
+ * so we resolve it through `resolveAsset(id)` to the Strapi **media object** it
+ * was re-uploaded to, and embed that in an `image` block.
+ *
+ * This is a compact, readable converter covering the nodes a typical blog body
+ * uses. Migrating richer content (tables, embedded entries) is exactly the kind
+ * of reshaping worth handing to Claude — extend the maps below for your model.
  */
 
-const MARK_WRAPPERS = {
-  bold: '**',
-  italic: '_',
-  code: '`',
+// Contentful mark type -> Strapi text node flag.
+const MARKS = { bold: 'bold', italic: 'italic', underline: 'underline', code: 'code' };
+
+function textNode(node) {
+  const t = { type: 'text', text: node.value ?? '' };
+  for (const m of node.marks ?? []) {
+    const flag = MARKS[m.type];
+    if (flag) t[flag] = true;
+  }
+  return t;
+}
+
+/** Convert inline content (text + links) to Strapi inline children. */
+function inlineChildren(nodes, ctx) {
+  const out = [];
+  for (const n of nodes ?? []) {
+    if (n.nodeType === 'text') {
+      out.push(textNode(n));
+    } else if (n.nodeType === 'hyperlink') {
+      out.push({ type: 'link', url: n.data?.uri ?? '', children: inlineChildren(n.content, ctx) });
+    } else if (n.content) {
+      out.push(...inlineChildren(n.content, ctx)); // flatten unknown inline wrappers
+    }
+  }
+  // Strapi requires a non-empty children array with at least a text node.
+  return out.length ? out : [{ type: 'text', text: '' }];
+}
+
+/** Gather inline content from a block that wraps paragraphs (list-item, quote). */
+function flattenInline(node) {
+  const inline = [];
+  for (const c of node.content ?? []) {
+    if (c.nodeType === 'text' || c.nodeType === 'hyperlink') inline.push(c);
+    else if (c.content) inline.push(...c.content);
+  }
+  return inline;
+}
+
+const HEADING_LEVEL = {
+  'heading-1': 1,
+  'heading-2': 2,
+  'heading-3': 3,
+  'heading-4': 4,
+  'heading-5': 5,
+  'heading-6': 6,
 };
 
-function applyMarks(text, marks = []) {
-  // Apply code last (innermost) so **`x`** renders correctly.
-  const ordered = [...marks].sort((a, b) => (a.type === 'code' ? 1 : 0) - (b.type === 'code' ? 1 : 0));
-  return ordered.reduce((acc, mark) => {
-    const wrap = MARK_WRAPPERS[mark.type];
-    return wrap ? `${wrap}${acc}${wrap}` : acc;
-  }, text);
-}
-
-function renderChildren(nodes, ctx) {
-  return (nodes ?? []).map((n) => renderNode(n, ctx)).join('');
-}
-
-function renderListItems(node, ctx, ordered) {
-  return (node.content ?? [])
-    .map((item, i) => {
-      const marker = ordered ? `${i + 1}.` : '-';
-      // A list-item wraps block nodes (usually a single paragraph).
-      const inner = renderChildren(item.content, ctx).trim();
-      return `${marker} ${inner}`;
-    })
-    .join('\n');
-}
-
-function renderNode(node, ctx) {
+function blockNode(node, ctx) {
+  if (HEADING_LEVEL[node.nodeType]) {
+    return { type: 'heading', level: HEADING_LEVEL[node.nodeType], children: inlineChildren(node.content, ctx) };
+  }
   switch (node.nodeType) {
-    case 'document':
-      return renderChildren(node.content, ctx)
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
-
     case 'paragraph':
-      return `${renderChildren(node.content, ctx)}\n\n`;
-
-    case 'heading-1':
-      return `# ${renderChildren(node.content, ctx)}\n\n`;
-    case 'heading-2':
-      return `## ${renderChildren(node.content, ctx)}\n\n`;
-    case 'heading-3':
-      return `### ${renderChildren(node.content, ctx)}\n\n`;
-    case 'heading-4':
-      return `#### ${renderChildren(node.content, ctx)}\n\n`;
-    case 'heading-5':
-      return `##### ${renderChildren(node.content, ctx)}\n\n`;
-    case 'heading-6':
-      return `###### ${renderChildren(node.content, ctx)}\n\n`;
+      return { type: 'paragraph', children: inlineChildren(node.content, ctx) };
 
     case 'unordered-list':
-      return `${renderListItems(node, ctx, false)}\n\n`;
     case 'ordered-list':
-      return `${renderListItems(node, ctx, true)}\n\n`;
-    case 'list-item':
-      return renderChildren(node.content, ctx);
+      return {
+        type: 'list',
+        format: node.nodeType === 'ordered-list' ? 'ordered' : 'unordered',
+        children: (node.content ?? []).map((li) => ({
+          type: 'list-item',
+          children: inlineChildren(flattenInline(li), ctx),
+        })),
+      };
 
     case 'blockquote':
-      return `> ${renderChildren(node.content, ctx).trim().replace(/\n/g, '\n> ')}\n\n`;
-
-    case 'hr':
-      return `---\n\n`;
-
-    case 'hyperlink': {
-      const label = renderChildren(node.content, ctx);
-      const url = node.data?.uri ?? '';
-      return `[${label}](${url})`;
-    }
-
-    case 'text':
-      return applyMarks(node.value ?? '', node.marks);
+      return { type: 'quote', children: inlineChildren(flattenInline(node), ctx) };
 
     case 'embedded-asset-block': {
-      const assetId = node.data?.target?.sys?.id;
-      const asset = assetId ? ctx.resolveAsset(assetId) : null;
-      if (!asset?.url) return '';
-      return `![${asset.alt ?? ''}](${asset.url})\n\n`;
+      const media = ctx.resolveAsset(node.data?.target?.sys?.id);
+      if (!media) return null;
+      return { type: 'image', image: media, children: [{ type: 'text', text: '' }] };
     }
 
+    case 'hr': // no Strapi block equivalent
     case 'embedded-entry-block':
     case 'embedded-entry-inline':
-      // Linked entries can't be inlined as Markdown text. Leave a breadcrumb so
-      // nothing is silently dropped; a real migration might render a shortcode.
-      return ctx.onEmbeddedEntry ? ctx.onEmbeddedEntry(node) : '';
+      return null;
 
     default:
-      // Unknown block: recurse into children so we don't lose text.
-      return renderChildren(node.content, ctx);
+      // Unknown block: recurse so we don't lose nested content.
+      return node.content ? node.content.map((c) => blockNode(c, ctx)).filter(Boolean) : null;
   }
 }
 
 /**
+ * Convert a Contentful rich text document to a Strapi Blocks array.
+ *
  * @param {object} document  Contentful rich text document node.
  * @param {object} options
- * @param {(assetId: string) => ({ url: string, alt?: string } | null)} options.resolveAsset
- * @param {(node: object) => string} [options.onEmbeddedEntry]
- * @returns {string} Markdown
+ * @param {(assetId: string) => (object | null)} options.resolveAsset
+ *   Resolves a Contentful asset id to the Strapi media object to embed.
+ * @returns {Array} Strapi Blocks value.
  */
-export function richTextToMarkdown(document, { resolveAsset, onEmbeddedEntry } = {}) {
+export function richTextToBlocks(document, { resolveAsset } = {}) {
+  const ctx = { resolveAsset: resolveAsset ?? (() => null) };
+  const blocks = [];
+  for (const node of document?.content ?? []) {
+    const b = blockNode(node, ctx);
+    if (Array.isArray(b)) blocks.push(...b.filter(Boolean));
+    else if (b) blocks.push(b);
+  }
+  // A Blocks field must not be an empty array.
+  return blocks.length ? blocks : [{ type: 'paragraph', children: [{ type: 'text', text: '' }] }];
+}
+
+// --- Markdown variant -------------------------------------------------------
+// Kept as an alternative target. Point migrate.js at this (and set the `body`
+// field to `richtext`) if you'd rather store Markdown than Blocks.
+
+const MD_WRAPPERS = { bold: '**', italic: '_', code: '`' };
+
+function applyMarks(text, marks = []) {
+  const ordered = [...marks].sort((a, b) => (a.type === 'code' ? 1 : 0) - (b.type === 'code' ? 1 : 0));
+  return ordered.reduce((acc, mark) => {
+    const wrap = MD_WRAPPERS[mark.type];
+    return wrap ? `${wrap}${acc}${wrap}` : acc;
+  }, text);
+}
+
+function mdChildren(nodes, ctx) {
+  return (nodes ?? []).map((n) => mdNode(n, ctx)).join('');
+}
+
+function mdNode(node, ctx) {
+  const lvl = HEADING_LEVEL[node.nodeType];
+  if (lvl) return `${'#'.repeat(lvl)} ${mdChildren(node.content, ctx)}\n\n`;
+  switch (node.nodeType) {
+    case 'document':
+      return mdChildren(node.content, ctx).replace(/\n{3,}/g, '\n\n').trim();
+    case 'paragraph':
+      return `${mdChildren(node.content, ctx)}\n\n`;
+    case 'unordered-list':
+    case 'ordered-list':
+      return (
+        (node.content ?? [])
+          .map((item, i) => `${node.nodeType === 'ordered-list' ? `${i + 1}.` : '-'} ${mdChildren(item.content, ctx).trim()}`)
+          .join('\n') + '\n\n'
+      );
+    case 'list-item':
+      return mdChildren(node.content, ctx);
+    case 'blockquote':
+      return `> ${mdChildren(node.content, ctx).trim().replace(/\n/g, '\n> ')}\n\n`;
+    case 'hr':
+      return `---\n\n`;
+    case 'hyperlink':
+      return `[${mdChildren(node.content, ctx)}](${node.data?.uri ?? ''})`;
+    case 'text':
+      return applyMarks(node.value ?? '', node.marks);
+    case 'embedded-asset-block': {
+      const media = ctx.resolveAsset(node.data?.target?.sys?.id);
+      return media?.url ? `![${media.alternativeText ?? ''}](${media.url})\n\n` : '';
+    }
+    default:
+      return node.content ? mdChildren(node.content, ctx) : '';
+  }
+}
+
+export function richTextToMarkdown(document, { resolveAsset } = {}) {
   if (!document || document.nodeType !== 'document') return '';
-  return renderNode(document, {
-    resolveAsset: resolveAsset ?? (() => null),
-    onEmbeddedEntry,
-  });
+  return mdNode(document, { resolveAsset: resolveAsset ?? (() => null) });
 }

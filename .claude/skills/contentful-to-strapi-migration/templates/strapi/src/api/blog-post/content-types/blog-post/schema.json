@@ -25,7 +25,7 @@
       "type": "text"
     },
     "body": {
-      "type": "richtext"
+      "type": "blocks"
     },
     "coverImage": {
       "type": "media",
