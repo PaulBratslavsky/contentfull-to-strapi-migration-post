@@ -75,23 +75,38 @@ templates/
 
 ## Steps
 
-### Step 1 — Add the content types to Strapi
+### Step 1 — Create the content types (derive them from the export)
 
-Copy the contents of `templates/strapi/` into the Strapi project (merge into its `src/` and
-`scripts/`):
+**Read `export.json`'s `contentTypes` and create matching Strapi content types — choose each
+Strapi field from what's actually in the export**, don't assume. Map by Contentful field type:
 
-```
-<strapi-project>/src/api/{blog-post,author,category,landing-page}/...
-<strapi-project>/src/index.ts          # bootstrap that grants public read on boot
-<strapi-project>/scripts/create-api-token.mjs
-```
+| Contentful field | Strapi field |
+|---|---|
+| `Symbol` (short text) | `string` (or `uid` for a slug) |
+| `Text` (long text) | `text` |
+| `RichText` | **Rich text (Blocks)** (`"type": "blocks"`) — converted by `richTextToBlocks` |
+| `Integer` / `Number` | `integer` / `decimal` |
+| `Boolean` | `boolean` |
+| `Date` | `date` / `datetime` |
+| `Object` (JSON) | `json` |
+| `Link` → `Asset` | single `media` |
+| `Link` → `Entry` | `relation` (manyToOne / oneToMany) |
+| `Array` of `Link`→`Entry` | `relation` (manyToMany / oneToMany) |
 
-These define `blog-post`, `author`, `category` (collection types) and `landing-page` (single
-type), each with a **`contentfulId`** string field that makes the migration idempotent. The
-`body` field is **Rich text (Blocks)** (Strapi's native block editor);
-`coverImage`/`avatar`/`heroImage` are single **media** fields;
-`author`/`category`/`featuredPosts` are **relations**. (Bundled as `.ts`; for a JavaScript
-project use `.js` — see the gotcha above.)
+Two rules regardless of model: add a **`contentfulId`** string field to every type (makes the
+migration idempotent), and make a Contentful content type that's used as a single one-off
+page (e.g. a landing page) a Strapi **single type**. Keep the schema's rich-text field as
+`blocks` so it agrees with the `richTextToBlocks` converter — a Blocks value written to a
+`richtext` (Markdown) field will error.
+
+For **this sample blog**, that derivation produces exactly what's in `templates/strapi/` —
+`blog-post`, `author`, `category` (collection types) and `landing-page` (single type), with a
+Blocks `body`, single `media` for `coverImage`/`avatar`/`heroImage`, and relations for
+`author`/`category`/`featuredPosts`. So for the sample you can copy the templates directly;
+for any other model, generate the schemas from the export using the table above and the same
+conventions. Either way also drop in `src/index.ts` (public-read bootstrap) and
+`scripts/create-api-token.mjs`. (Templates are `.ts`; for a JS project use `.js` — see the
+gotcha above.)
 
 Restart Strapi (`npm run develop`). On boot, `src/index.ts` grants the public role
 `find`/`findOne` so you can verify the result without logging in.
