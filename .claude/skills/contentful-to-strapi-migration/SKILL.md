@@ -54,6 +54,8 @@ templates/
 > project is **JavaScript** instead (`src/index.js`, no `tsconfig.json`), rename these files
 > to `.js` and drop the type annotations — they're one-line factory wrappers. Always check
 > first: does the project have `tsconfig.json` / `src/index.ts` (TS) or `src/index.js` (JS)?
+>
+> Write **idiomatic Strapi v5 TypeScript** in a TS project — `import { factories } from '@strapi/strapi'` with `export default factories.createCoreController('api::x.x')`, not CommonJS `require`/`module.exports`. (The bundled `.ts` files already follow this; keep generated ones consistent.)
 
 > **Tip:** enable the [Strapi docs MCP](https://docs.strapi.io/cms/ai/docs-mcp-server)
 > (`https://strapi-docs.mcp.kapa.ai`) and verify Strapi specifics against it as you go
@@ -115,8 +117,11 @@ conventions. Either way also drop in `src/index.ts` (public-read bootstrap) and
 `scripts/create-api-token.mjs`. (Templates are `.ts`; for a JS project use `.js` — see the
 gotcha above.)
 
-Restart Strapi (`npm run develop`). On boot, `src/index.ts` grants the public role
-`find`/`findOne` so you can verify the result without logging in.
+**Don't restart or kill the user's dev server.** In `develop` mode Strapi **auto-reloads**
+when you add these files — just wait for the reload and poll `/api/<plural>` to confirm the
+routes are live. If the server isn't running (or not in develop mode), ask the user to start
+it with `npm run develop` rather than launching or relaunching it yourself. On boot/reload,
+`src/index.ts` grants the public role `find`/`findOne` so you can verify without logging in.
 
 > Adapting to a different model? Edit/replace these schema files (and the `COLLECTION` map in
 > Step 3) to match — keep a `contentfulId` field on every type.
