@@ -31,6 +31,7 @@ so you can see the whole pipeline work without a Contentful account.
 # 1. Start the destination
 cd playground/strapi-server
 npm install
+cp .env.example .env     # required — supplies APP_KEYS and other secrets
 npm run develop          # http://localhost:1337  (create an admin on first run)
 
 # 2. Get a write API token (either create one in the admin panel under

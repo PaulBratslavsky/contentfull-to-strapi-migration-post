@@ -6,9 +6,21 @@
 - Strapi v5 has a few sharp edges that trip up old tutorials: entries are addressed by `documentId`, you can't attach a file while creating an entry, and media fields are set by a numeric file id (not the relation `connect` syntax). We cover all three.
 - The full, working project lives in [`playground/`](./playground): a Strapi destination, scripts to seed a sample Contentful space, and the migration tool with a bundled sample export so you can run it immediately.
 
+> **What this means (in my opinion).** As I write this, Contentful has [signed a definitive agreement to be acquired by Salesforce](https://www.contentful.com/blog/a-new-chapter-for-contentful/). My read on what that brings:
+>
+> - **Distribution win for Contentful.** It rides Salesforce's enterprise machine — no separate procurement cycle, instant reach into big accounts.
+> - **Less of the developer-first "cool" Contentful** that people fell for. Acquired products tend to drift toward the parent company's priorities.
+> - **More expensive, and likely the end of self-serve.** Salesforce sells to enterprises, so expect pricing and focus to follow — and don't rule out them sunsetting Contentful entirely down the road. They did, after all, gut Heroku's beloved free tier after acquiring it.
+>
+> That's opinion and prediction, not prophecy. But if any of it rings true, the safe move is to make sure your content isn't locked into someone else's platform — which is exactly what this guide is about.
+
 ## Why move from Contentful to Strapi?
 
 Contentful is a polished, hosted headless CMS. Teams usually start looking elsewhere for a few reasons: per-seat and per-record pricing that grows with the team, content-model limits on lower tiers, and the simple fact that you don't host your own data. [Strapi](https://strapi.io) is the most popular open-source alternative — you self-host it (or use Strapi Cloud), you own the database, and the REST and GraphQL APIs are yours to customize.
+
+As noted up top, the [Salesforce acquisition](https://www.contentful.com/blog/a-new-chapter-for-contentful/) only sharpens these reasons — co-founder Sascha Konietzke pitches Contentful's structured content as the layer for Salesforce's Agentforce, [writing that "AI agents now outnumber humans on the Web."](https://www.contentful.com/blog/a-new-chapter-for-contentful/) Whichever way that goes, owning your content keeps the choice yours.
+
+The difference shows up the moment you sit down to build. **Contentful is software-as-a-service: there's no way to run it locally or offline.** Even to read your own content model you have to create an account and authenticate against Contentful's servers — which is exactly why the setup below makes you sign up and run `contentful login`. **Strapi is the opposite: it's fully self-hosted.** You run it on your own machine with `npm run develop`, the data lives in your own database, and no account or login to anyone's servers is required. That ownership is the whole point of the move — and you'll feel it in this tutorial, where the source side needs a hosted account and the destination side is just a process on `localhost`.
 
 The catch is that the two model content differently enough that you can't just copy a database table across. This post walks through a real migration of a small blog and gives you a project you can run end to end.
 
@@ -45,36 +57,67 @@ node -v        # should print v18.18 or higher
 **2. Get the example code.** Clone the companion repo and move into it:
 
 ```bash
-git clone <this-repo-url> contentful-to-strapi
+git clone https://github.com/PaulBratslavsky/contentfull-to-strapi-migration-post.git contentful-to-strapi
 cd contentful-to-strapi
 ```
 
 Inside you'll find a `playground/` with three folders: `contentful-seed/` (the source),
 `strapi-server/` (the destination), and `migrate/` (the migration tool).
 
-**3. Create a free Contentful account, space, and token.** Sign up at
-[contentful.com](https://www.contentful.com/), create a space, then create a
-**Content Management API token**: in the web app go to **Settings → API keys →
-Content management tokens → Generate personal token**. Copy the token and note your
-**Space ID** (Settings → General settings). A read-only *Content Delivery* token is not
-enough here — we need to read the model and export content, which requires the
-management token.
+**3. Create a free Contentful account and space.** Because Contentful is hosted, there's
+no local option here — you need an account on their servers even to define a content
+model. If you don't have one yet:
 
-> Only doing the quick demo run? You can skip steps 3–4: the `migrate/` folder ships
-> with a sample export, so you don't need a Contentful account to see the migration work.
+1. Go to [contentful.com](https://www.contentful.com/) and click **Sign up** (the free
+   tier is plenty for this tutorial; no credit card required).
+2. Verify your email and finish onboarding. Contentful usually creates a first space for
+   you; if not, click **Add space → Create an empty space** and give it a name.
+3. Grab your **Space ID**: in that space, go to **Settings → General settings** and copy
+   the *Space ID* value. You'll point the CLI at it in the next step.
 
-**4. Install and log in to the Contentful CLI.** This is the tool that creates the
-content model and exports the space:
+You do **not** need to create an API token by hand — the CLI login in step 4 generates one
+for you.
+
+> Only doing the quick demo run? You can skip steps 3–4 entirely: the `migrate/` folder
+> ships with a sample export, so you don't need a Contentful account to watch the migration
+> work against your local Strapi.
+
+> **Why an account is unavoidable here.** Contentful is software-as-a-service — you can't
+> spin it up locally, so reading or exporting your own content always goes through their
+> hosted API and requires logging in. Strapi (the destination) is the mirror image: it's
+> fully self-hosted, runs on `localhost`, and needs no account at all. Same reason teams
+> migrate in the first place.
+
+**4. Install the Contentful CLI, then log in.** Part 1 (creating the content model and
+exporting your space) is driven by the **[Contentful CLI](https://www.contentful.com/developers/docs/tutorials/cli/)** — it's a required tool, so install it first if you don't already have it:
 
 ```bash
-npm install -g contentful-cli       # install the CLI globally
-contentful login                    # opens a browser to authorize
-contentful space use --space-id <your-space-id>
+npm install -g contentful-cli     # install globally
+contentful --version              # confirm it's on your PATH
 ```
+
+> Can't or don't want a global install? Skip the install and prefix the commands with
+> `npx`, e.g. `npx -y contentful-cli login`. Same result.
+
+Logging in is also how you get a credential:
+[`contentful login`](https://www.contentful.com/developers/docs/tutorials/cli/authentication/)
+opens a browser, and on authorizing it **generates a Content Management token and stores it**
+(along with your active space) in `~/.contentfulrc.json`:
+
+```bash
+contentful login                                   # browser authorize -> stores a CMA token
+contentful space use --space-id <your-space-id>    # stores your active space
+```
+
+That's the whole auth setup. The seed and export scripts read those stored credentials
+automatically — **nothing to copy or paste.** (Prefer explicit credentials, e.g. for CI?
+Generate a personal token under **Settings → API keys → Content management tokens** and
+put it in `playground/contentful-seed/.env` as `CONTENTFUL_MANAGEMENT_TOKEN`; env values
+override the CLI config.)
 
 **5. Strapi needs nothing installed globally.** The `strapi-server/` project brings its
 own dependencies; you'll start it with `npm run develop` later. With Node, the code, a
-Contentful space, and the CLI in place, you're ready.
+Contentful space, and the CLI logged in, you're ready.
 
 ## How the two CMSes line up
 
@@ -107,8 +150,11 @@ UI so the starting point is identical for everyone.
 ```bash
 cd playground/contentful-seed
 npm install
-cp .env.example .env      # then put your Space ID + management token in .env
 ```
+
+No `.env` needed if you ran `contentful login` and `contentful space use` in setup — the
+scripts pick up those credentials. (Doing CI or prefer to be explicit? `cp .env.example .env`
+and fill in `CONTENTFUL_SPACE_ID` + `CONTENTFUL_MANAGEMENT_TOKEN`.)
 
 **Step 1.2 — Create the content model.** The model is defined as code with the
 [Contentful migration DSL](https://www.contentful.com/developers/docs/tutorials/cli/scripting-migrations/) — reproducible and version-controllable, so running it against a fresh space
@@ -180,15 +226,19 @@ see the migration run.)
 **Goal of this section:** stand up the destination — a running Strapi v5 instance with
 content types that match the Contentful model, plus an API token the migration can use.
 
-**Step 2.1 — Start the Strapi project.** The example ships one in `playground/strapi-server`:
+**Step 2.1 — Start the Strapi project.** The example ships one in `playground/strapi-server`.
+Copy the env file before starting — Strapi won't boot without it (you'll get
+*"App keys are required"*):
 
 ```bash
 cd playground/strapi-server
 npm install
-npm run develop          # first launch prompts you to create an admin user
+cp .env.example .env      # required — supplies APP_KEYS and the other secrets
+npm run develop           # first launch prompts you to create an admin user
 ```
 
-Leave it running. The admin panel is at `http://localhost:1337/admin`.
+Leave it running. The admin panel is at `http://localhost:1337/admin`. (The bundled
+`.env.example` has working local-dev secrets; regenerate them for any real deployment.)
 
 **Step 2.2 — Know the content types you're matching.** The project already defines them;
 the key modeling choices are: 
@@ -401,10 +451,13 @@ space (not the bundled sample). Each command maps back to the step that explains
 the tool setup first ([Before you begin](#before-you-begin-set-up-your-tools)), then:
 
 ```bash
+# Auth once — generates and stores a CMA token + active space (Step 4)
+contentful login
+contentful space use --space-id <your-space-id>
+
 # Source — seed and export your Contentful space (Steps 1.1–1.4)
 cd playground/contentful-seed
-npm install
-cp .env.example .env        # CONTENTFUL_SPACE_ID + CONTENTFUL_MANAGEMENT_TOKEN
+npm install                 # credentials come from the CLI login above — no .env needed
 npm run model               # create the content model
 npm run seed                # create + publish the sample entries and images
 npm run export              # write ../migrate/sample-data/export.json + assets
@@ -412,6 +465,7 @@ npm run export              # write ../migrate/sample-data/export.json + assets
 # Destination — start Strapi and get a token (Steps 2.1, 2.3), in a second terminal
 cd ../strapi-server
 npm install
+cp .env.example .env        # required — APP_KEYS and other secrets
 npm run develop             # create your admin user on first launch
 node scripts/create-api-token.mjs   # prints a full-access token
 
@@ -495,6 +549,8 @@ Either way the hard parts are the same three this post covered — rich text, as
 - Migrate from Contentful to Strapi (community guide on the Strapi blog, by Tim Adler): https://strapi.io/blog/migrate-from-contenful-to-strapi
 - strapi_lift migration tool: https://github.com/toadle/strapi_lift
 - What are agent skills and how to use them (Strapi blog): https://strapi.io/blog/what-are-agent-skills-and-how-to-use-them
+- A New Chapter for Contentful: Scaling Our Vision with Salesforce (Sascha Konietzke, Contentful): https://www.contentful.com/blog/a-new-chapter-for-contentful/
+- Salesforce Signs Definitive Agreement to Acquire Contentful (Salesforce newsroom): https://www.salesforce.com/news/stories/salesforce-signs-definitive-agreement-to-acquire-contentful/
 - Strapi REST API reference: https://docs.strapi.io/cms/api/rest
 - Strapi v5 — use documentId (breaking change): https://docs.strapi.io/cms/migration/v4-to-v5/breaking-changes/use-document-id
 - Strapi v5 — no upload at entry creation (breaking change): https://docs.strapi.io/cms/migration/v4-to-v5/breaking-changes/no-upload-at-entry-creation

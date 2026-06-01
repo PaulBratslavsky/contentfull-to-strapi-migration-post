@@ -5,29 +5,57 @@
  * Prerequisite: the content model exists. Create it first with
  *   npm run model      (runs migrations/001-blog-model.js via the Contentful CLI)
  *
- * Then:
- *   cp .env.example .env   # fill in SPACE_ID + a Content Management token
- *   npm run seed
+ * Credentials are auto-discovered, easiest first:
+ *   1. After `contentful login` + `contentful space use --space-id <id>`, this
+ *      script reads the CLI's stored ~/.contentfulrc.json — nothing to paste.
+ *   2. Or set CONTENTFUL_SPACE_ID + CONTENTFUL_MANAGEMENT_TOKEN in a .env file
+ *      (handy for CI). Env vars win over the CLI config.
+ *
+ * Then:  npm run seed
  *
  * Re-running is safe: entries/assets use deterministic ids, so an existing one
  * is updated instead of duplicated.
  */
 import 'dotenv/config';
 import { deflateSync } from 'node:zlib';
+import { homedir } from 'node:os';
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import contentful from 'contentful-management';
 
 const LOCALE = 'en-US';
-const SPACE_ID = req('CONTENTFUL_SPACE_ID');
-const ENVIRONMENT_ID = process.env.CONTENTFUL_ENVIRONMENT_ID || 'master';
-const TOKEN = req('CONTENTFUL_MANAGEMENT_TOKEN');
 
-function req(name) {
-  const v = process.env[name];
-  if (!v) {
-    console.error(`Missing ${name}. Copy .env.example to .env and fill it in.`);
-    process.exit(1);
+/**
+ * `contentful login` stores a generated CMA token, and `contentful space use`
+ * stores the active space, in .contentfulrc.json (cwd first, then home dir).
+ * We read that so the common path needs no manual token copying.
+ */
+function cliConfig() {
+  for (const p of [join(process.cwd(), '.contentfulrc.json'), join(homedir(), '.contentfulrc.json')]) {
+    if (existsSync(p)) {
+      try {
+        return JSON.parse(readFileSync(p, 'utf8'));
+      } catch {
+        /* ignore malformed config */
+      }
+    }
   }
-  return v;
+  return {};
+}
+
+const cli = cliConfig();
+const SPACE_ID = process.env.CONTENTFUL_SPACE_ID || cli.activeSpaceId;
+const ENVIRONMENT_ID =
+  process.env.CONTENTFUL_ENVIRONMENT_ID || cli.activeEnvironmentId || 'master';
+const TOKEN = process.env.CONTENTFUL_MANAGEMENT_TOKEN || cli.managementToken;
+
+if (!SPACE_ID || !TOKEN) {
+  console.error(
+    'Could not find Contentful credentials.\n' +
+      'Easiest: run `contentful login` then `contentful space use --space-id <id>`.\n' +
+      'Or set CONTENTFUL_SPACE_ID and CONTENTFUL_MANAGEMENT_TOKEN in a .env file.'
+  );
+  process.exit(1);
 }
 
 // --- placeholder image generation (so the seed needs no binary fixtures) ---

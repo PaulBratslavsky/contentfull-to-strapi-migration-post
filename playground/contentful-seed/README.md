@@ -10,19 +10,27 @@ and the tool that moves content between them is [`../migrate`](../migrate).
 ## What you need
 
 - A free [Contentful](https://www.contentful.com/) account and a space.
-- A **Content Management API** token (Settings → API keys → Content management tokens →
-  *Generate personal token*). A read-only Delivery token is not enough.
+- The [Contentful CLI](https://www.contentful.com/developers/docs/tutorials/cli/),
+  logged in. `contentful login` generates and stores a Content Management token for you —
+  no manual token creation needed.
 
 ## Use it
 
 ```bash
-npm install
-cp .env.example .env        # set CONTENTFUL_SPACE_ID + CONTENTFUL_MANAGEMENT_TOKEN
+# one-time auth: generates + stores a CMA token and your active space
+npm install -g contentful-cli
+contentful login
+contentful space use --space-id <your-space-id>
 
+npm install
 npm run model               # 1. create the content types (contentful-migration DSL)
 npm run seed                # 2. upload images + create/publish the sample entries
 npm run export              # 3. export to ../migrate/sample-data/export.json (+ assets)
 ```
+
+All three scripts read the credentials the CLI stored — there's nothing to paste. (Prefer
+explicit credentials, e.g. for CI? `cp .env.example .env` and set `CONTENTFUL_SPACE_ID` +
+`CONTENTFUL_MANAGEMENT_TOKEN`; env values override the CLI config.)
 
 After step 2, open your space in the Contentful web app and you'll see the seeded blog.
 Step 3 produces the `export.json` the migration reads.
