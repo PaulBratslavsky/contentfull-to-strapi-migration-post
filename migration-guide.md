@@ -99,10 +99,6 @@ opens a browser; authorizing it **generates a Content Management token and store
 `~/.contentfulrc.json`:
 
 ```bash
-contentful login        # browser authorize -> stores a CMA token
-```
-
-```bash
 contentful login
 
 A browser window will open where you will log in (or sign up if you don’t have an account), authorize this CLI tool and paste your CMA token here:
@@ -112,27 +108,23 @@ A browser window will open where you will log in (or sign up if you don’t have
 
 Great! You've successfully logged in!
 ```
-**4c — Pick or create your space (no web UI needed).** List what your account already has,
-then either select an existing space or create a new one with the CLI:
+**4c — Create a space for this example.** This tutorial seeds a specific set of sample
+content, so create a dedicated, clean space for it rather than mixing it into an existing
+one. The CLI creates the space and prints its **Space ID**; then make it active:
 
 ```bash
-contentful space list                          # shows your spaces and their IDs
-
-# If a space already exists (e.g. the starter one), select it:
-contentful space use --space-id <id-from-the-list>
-
-# If no space exists, create one — then select it:
-contentful space create --name "contentful-to-strapi-demo"
-contentful space use --space-id <id-printed-by-create>
+contentful space create --name "contentful-to-strapi-demo"   # prints the new Space ID
+contentful space use --space-id <id-printed-by-create>       # make it the active space
 ```
 
-> Got more than one organization? `contentful space create` needs to know which one — pass
-> `--organization-id <id>` (list IDs with `contentful organization list`). Free-tier
-> accounts allow a single space, so if `create` says you've hit the limit, just
-> `space use` the space you already have.
+> Got more than one organization? `contentful space create` needs to know which — add
+> `--organization-id <id>` (list them with `contentful organization list`). On the free
+> tier you get a single space, so if `create` says you've hit the limit, delete an unused
+> space (or `contentful space use --space-id <id>` an existing empty one) and carry on.
 
-> **No global install?** Prefix every `contentful` command above with `npx -y contentful-cli`
-> — e.g. `npx -y contentful-cli login` — and skip step 4a's `npm install -g`.
+> **No global install?** Prefix every `contentful` command with `npx -y contentful-cli` —
+> e.g. `npx -y contentful-cli space create --name "contentful-to-strapi-demo"` — and skip step 4a.
+
 
 That's the whole auth setup. The seed and export scripts read those stored credentials
 automatically — **nothing to copy or paste.** (Prefer explicit credentials, e.g. for CI?
