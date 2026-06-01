@@ -99,6 +99,13 @@ page (e.g. a landing page) a Strapi **single type**. Keep the schema's rich-text
 `blocks` so it agrees with the `richTextToBlocks` converter — a Blocks value written to a
 `richtext` (Markdown) field will error.
 
+When the model is richer than flat fields — reusable field groups, page-builder layouts,
+mixed/modular sections — read **[`references/strapi-content-modeling.md`](references/strapi-content-modeling.md)**
+to choose well between **components**, **dynamic zones**, and **relations** (and single vs
+collection types). The short version: a reused standalone entity → relation to a collection
+type; a repeated/reused field group → component; a page of varied reorderable sections →
+dynamic zone of components.
+
 For **this sample blog**, that derivation produces exactly what's in `templates/strapi/` —
 `blog-post`, `author`, `category` (collection types) and `landing-page` (single type), with a
 Blocks `body`, single `media` for `coverImage`/`avatar`/`heroImage`, and relations for
