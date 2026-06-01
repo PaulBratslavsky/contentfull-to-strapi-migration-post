@@ -1,13 +1,8 @@
-'use strict';
-
 /**
- * `default-populate` middleware
- *
- * Auto-populates relations and media on blog-post find/findOne so callers don't
- * have to pass ?populate. Skipped when the request already specifies populate.
+ * Auto-populate relations + media on blog-post find/findOne unless the request
+ * already specifies populate.
  */
-
-module.exports = (config, { strapi }) => {
+export default (config, { strapi }) => {
   return async (ctx, next) => {
     if (!ctx.query.populate) {
       ctx.query.populate = {

@@ -36,21 +36,36 @@ Everything it needs is bundled under `templates/`:
 ```
 templates/
 ├── strapi/                 # the destination content types (drop into a Strapi v5 project)
-│   ├── src/api/{blog-post,author,category,landing-page}/   # schema + controller/route/service
-│   ├── src/index.js        # bootstrap: grants the public role read access
+│   ├── src/api/{blog-post,author,category,landing-page}/   # schema.json + controller/route/service/middleware (.ts)
+│   ├── src/index.ts        # bootstrap: grants the public role read access
 │   └── scripts/create-api-token.mjs   # mint a full-access token headlessly
-└── migrate/                # the migration tool
+└── migrate/                # the migration tool (standalone Node ESM)
     ├── migrate.js          # orchestrator (the COLLECTION map + field builders live here)
     ├── lib/{contentful,richtext,assets,strapi}.js
     ├── package.json
     └── .env.example
 ```
 
+> **Match the project's language — this is the #1 gotcha.** The bundled content-type files
+> are **TypeScript** (`.ts`), because `create-strapi-app` defaults to TypeScript. A TypeScript
+> Strapi project compiles `src/` to `dist/` and **silently drops stray `.js` files** (its
+> tsconfig doesn't enable `allowJs`) — so `.js` controllers/routes never reach `dist`, the
+> content type registers but has **no routes**, and `/api/...` returns 404. If the target
+> project is **JavaScript** instead (`src/index.js`, no `tsconfig.json`), rename these files
+> to `.js` and drop the type annotations — they're one-line factory wrappers. Always check
+> first: does the project have `tsconfig.json` / `src/index.ts` (TS) or `src/index.js` (JS)?
+
+> **Tip:** enable the [Strapi docs MCP](https://docs.strapi.io/cms/ai/docs-mcp-server)
+> (`https://strapi-docs.mcp.kapa.ai`) and verify Strapi specifics against it as you go
+> (content-type file conventions, the Blocks field shape, the permissions API). Prefix a
+> query with "Use the strapi-docs MCP server to answer:" so it uses current docs.
+
 ## Prerequisites to confirm with the user
 
 1. **A Strapi v5 project.** If they don't have one, scaffold it:
-   `npx create-strapi-app@latest my-strapi-blog --skip-cloud --no-example`. A freshly
-   generated project writes its own working `.env`.
+   `npx create-strapi-app@latest my-strapi-blog --non-interactive` (TypeScript) — or add
+   `--js` for a JavaScript project. Match the content-type file extensions to whichever you
+   pick (see the gotcha above). A freshly generated project writes its own working `.env`.
 2. **A Contentful export.** Either they already have one, or produce it with the CLI
    (after `contentful login` + `contentful space use`):
    ```bash
@@ -67,16 +82,18 @@ Copy the contents of `templates/strapi/` into the Strapi project (merge into its
 
 ```
 <strapi-project>/src/api/{blog-post,author,category,landing-page}/...
-<strapi-project>/src/index.js          # bootstrap that grants public read on boot
+<strapi-project>/src/index.ts          # bootstrap that grants public read on boot
 <strapi-project>/scripts/create-api-token.mjs
 ```
 
 These define `blog-post`, `author`, `category` (collection types) and `landing-page` (single
 type), each with a **`contentfulId`** string field that makes the migration idempotent. The
-`body` field is **richtext (Markdown)**; `coverImage`/`avatar`/`heroImage` are single
-**media** fields; `author`/`category`/`featuredPosts` are **relations**.
+`body` field is **Rich text (Blocks)** (Strapi's native block editor);
+`coverImage`/`avatar`/`heroImage` are single **media** fields;
+`author`/`category`/`featuredPosts` are **relations**. (Bundled as `.ts`; for a JavaScript
+project use `.js` — see the gotcha above.)
 
-Restart Strapi (`npm run develop`). On boot, `src/index.js` grants the public role
+Restart Strapi (`npm run develop`). On boot, `src/index.ts` grants the public role
 `find`/`findOne` so you can verify the result without logging in.
 
 > Adapting to a different model? Edit/replace these schema files (and the `COLLECTION` map in
