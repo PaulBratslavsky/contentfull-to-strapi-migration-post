@@ -64,19 +64,14 @@ cd contentful-to-strapi
 Inside you'll find a `playground/` with three folders: `contentful-seed/` (the source),
 `strapi-server/` (the destination), and `migrate/` (the migration tool).
 
-**3. Create a free Contentful account and space.** Because Contentful is hosted, there's
-no local option here — you need an account on their servers even to define a content
-model. If you don't have one yet:
+**3. Create a free Contentful account.** Because Contentful is hosted, there's no local
+option — you need an account on their servers even to define a content model. Go to
+[contentful.com](https://www.contentful.com/), click **Sign up** (the free tier is plenty
+for this tutorial; no credit card required), and verify your email. Contentful usually
+creates a starter space for you during onboarding.
 
-1. Go to [contentful.com](https://www.contentful.com/) and click **Sign up** (the free
-   tier is plenty for this tutorial; no credit card required).
-2. Verify your email and finish onboarding. Contentful usually creates a first space for
-   you; if not, click **Add space → Create an empty space** and give it a name.
-3. Grab your **Space ID**: in that space, go to **Settings → General settings** and copy
-   the *Space ID* value. You'll point the CLI at it in the next step.
-
-You do **not** need to create an API token by hand — the CLI login in step 4 generates one
-for you.
+You do **not** need to create a space or an API token by hand in the web UI — the CLI in
+step 4 handles both: it lists or creates your space, and generates the token when you log in.
 
 > Only doing the quick demo run? You can skip steps 3–4 entirely: the `migrate/` folder
 > ships with a sample export, so you don't need a Contentful account to watch the migration
@@ -89,25 +84,55 @@ for you.
 > migrate in the first place.
 
 **4. Install the Contentful CLI, then log in.** Part 1 (creating the content model and
-exporting your space) is driven by the **[Contentful CLI](https://www.contentful.com/developers/docs/tutorials/cli/)** — it's a required tool, so install it first if you don't already have it:
+exporting your space) is driven by the **[Contentful CLI](https://www.contentful.com/developers/docs/tutorials/cli/)**, so set it up now. Two actions:
+
+**4a — Install the CLI** (skip if you already have it; confirm with `contentful --version`):
 
 ```bash
-npm install -g contentful-cli     # install globally
+npm install -g contentful-cli
 contentful --version              # confirm it's on your PATH
 ```
 
-> Can't or don't want a global install? Skip the install and prefix the commands with
-> `npx`, e.g. `npx -y contentful-cli login`. Same result.
-
-Logging in is also how you get a credential:
+**4b — Log in.**
 [`contentful login`](https://www.contentful.com/developers/docs/tutorials/cli/authentication/)
-opens a browser, and on authorizing it **generates a Content Management token and stores it**
-(along with your active space) in `~/.contentfulrc.json`:
+opens a browser; authorizing it **generates a Content Management token and stores it** in
+`~/.contentfulrc.json`:
 
 ```bash
-contentful login                                   # browser authorize -> stores a CMA token
-contentful space use --space-id <your-space-id>    # stores your active space
+contentful login        # browser authorize -> stores a CMA token
 ```
+
+```bash
+contentful login
+
+A browser window will open where you will log in (or sign up if you don’t have an account), authorize this CLI tool and paste your CMA token here:
+
+? Continue login on the browser? Yes
+? Paste your token here: *******************************************
+
+Great! You've successfully logged in!
+```
+**4c — Pick or create your space (no web UI needed).** List what your account already has,
+then either select an existing space or create a new one with the CLI:
+
+```bash
+contentful space list                          # shows your spaces and their IDs
+
+# If a space already exists (e.g. the starter one), select it:
+contentful space use --space-id <id-from-the-list>
+
+# If no space exists, create one — then select it:
+contentful space create --name "contentful-to-strapi-demo"
+contentful space use --space-id <id-printed-by-create>
+```
+
+> Got more than one organization? `contentful space create` needs to know which one — pass
+> `--organization-id <id>` (list IDs with `contentful organization list`). Free-tier
+> accounts allow a single space, so if `create` says you've hit the limit, just
+> `space use` the space you already have.
+
+> **No global install?** Prefix every `contentful` command above with `npx -y contentful-cli`
+> — e.g. `npx -y contentful-cli login` — and skip step 4a's `npm install -g`.
 
 That's the whole auth setup. The seed and export scripts read those stored credentials
 automatically — **nothing to copy or paste.** (Prefer explicit credentials, e.g. for CI?
