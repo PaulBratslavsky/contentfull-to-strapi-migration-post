@@ -2,7 +2,6 @@
   "name": "contentful-seed",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
   "description": "Reproducibly create the sample blog content model and entries in a Contentful space.",
   "scripts": {
     "model": "contentful space migration --yes migrations/001-blog-model.js",
