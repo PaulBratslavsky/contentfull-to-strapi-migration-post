@@ -237,11 +237,18 @@ async function upsertAsset(env, def) {
   } catch (err) {
     if (err.name !== 'NotFound') throw err;
     const png = solidPng(def.size[0], def.size[1], def.color);
-    asset = await env.createAssetFromFiles({
+    // Upload the bytes, then create the asset with a *deterministic* id so the
+    // entries (which link assets by these ids) resolve, and re-runs are idempotent.
+    const upload = await env.createUpload({ file: png });
+    asset = await env.createAssetWithId(def.id, {
       fields: {
         title: loc(def.title),
         description: loc(def.title),
-        file: loc({ contentType: 'image/png', fileName: def.file, file: png }),
+        file: loc({
+          contentType: 'image/png',
+          fileName: def.file,
+          uploadFrom: { sys: { type: 'Link', linkType: 'Upload', id: upload.sys.id } },
+        }),
       },
     });
     asset = await asset.processForAllLocales();
