@@ -182,19 +182,26 @@ your content model, creates matching content types in Strapi (rich text as the n
 **Step 2.1 — Create a Strapi project.** Use Strapi's official generator:
 
 ```bash
-npx create-strapi-app@latest my-strapi-blog --skip-cloud --no-example
+npx create-strapi-app@latest my-strapi-blog --non-interactive
 cd my-strapi-blog
-npm run develop      # creates its .env, then prompts you to create an admin user
+npm run develop  
 ```
 
 Leave it running — the admin panel is at `http://localhost:1337/admin`.
 
-**Step 2.2 — Run the skill.** Open the project in [Claude Code](https://claude.com/claude-code).
-The repo ships the skill at `.claude/skills/contentful-to-strapi-migration/`, so it's
-available automatically — just ask, pointing at your Part 1 export:
+**Step 2.2 — Run the skill.** With the Strapi dev server still running, open
+[Claude Code](https://claude.com/claude-code) **at the repo root** — from there it can see
+both your export and the Strapi project, and the skill (shipped at
+`.claude/skills/contentful-to-strapi-migration/`) is picked up automatically. Then give it a
+prompt with the two paths:
 
-> Use the contentful-to-strapi-migration skill to migrate my Contentful export at
-> `playground/contentful-seed/export/export.json` into this Strapi project.
+```text
+Use the contentful-to-strapi-migration skill to migrate my Contentful export into Strapi.
+The export is at playground/contentful-seed/export/export.json and its downloaded images
+are in playground/contentful-seed/export/. My Strapi v5 project is at ./my-strapi-blog,
+running at http://localhost:1337. Create the content types, set up a write API token, run
+the migration, then show me the migrated posts.
+```
 
 Here's what the skill does for you, start to finish:
 
@@ -283,15 +290,19 @@ npm run export              # writes ./export/export.json + downloaded images
 
 # Destination — create a Strapi project (Part 2)
 cd ../..
-npx create-strapi-app@latest my-strapi-blog --skip-cloud --no-example
+npx create-strapi-app@latest my-strapi-blog --non-interactive
 cd my-strapi-blog
 npm run develop             # create your admin user, then leave it running
 ```
 
 Then, in [Claude Code](https://claude.com/claude-code), run the skill:
 
-> Use the contentful-to-strapi-migration skill to migrate my Contentful export at
-> `playground/contentful-seed/export/export.json` into this Strapi project.
+```text
+Use the contentful-to-strapi-migration skill to migrate my Contentful export at
+playground/contentful-seed/export/export.json into the Strapi project at ./my-strapi-blog
+(running at http://localhost:1337). Create the content types, set up a write API token,
+run the migration, and show me the migrated posts.
+```
 
 ```bash
 # Verify
@@ -311,6 +322,16 @@ so Claude Code finds it automatically when you open the project. It's deliberate
 it reads your Contentful export to adapt. Point it at a different space and it builds the
 matching content types and migration for that model. Want to change how something maps? Just
 tell Claude — the skill is yours to adapt.
+
+One adaptation worth knowing about: Strapi 5.47+ ships an
+[**MCP server**](https://docs.strapi.io/cms/features/strapi-mcp-server) that lets an AI
+client create, update, and publish **entries** (and wire up relations) natively. This skill
+creates entries over the REST API, which needs nothing but a token — but if you'd rather
+have Claude create the content through the Strapi MCP, enable it
+(`mcp: { enabled: true }` in `config/server.js`, connect via `/mcp` with an admin token) and
+tell Claude to use it for the entry step. Note the MCP **doesn't create content types or
+upload media**, so the collection setup and image upload still happen the way they do here —
+which is exactly the kind of thing you'd adjust in your own copy of the skill.
 
 New to agent skills and want to build your own? Strapi has a friendly primer:
 [**What are agent skills and how to use them**](https://strapi.io/blog/what-are-agent-skills-and-how-to-use-them).
