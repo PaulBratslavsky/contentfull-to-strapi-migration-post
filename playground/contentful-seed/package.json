@@ -1,0 +1,22 @@
+{
+  "name": "contentful-seed",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Reproducibly create the sample blog content model and entries in a Contentful space.",
+  "scripts": {
+    "model": "contentful space migration --yes migrations/001-blog-model.js",
+    "seed": "node seed.mjs",
+    "export": "contentful space export --content-file ../migrate/sample-data/export.json --download-assets --export-dir ../migrate/sample-data"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "dependencies": {
+    "contentful-management": "^11.0.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "contentful-cli": "^3.0.0"
+  }
+}
