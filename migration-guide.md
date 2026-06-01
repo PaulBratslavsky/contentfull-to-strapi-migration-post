@@ -486,10 +486,12 @@ and all relations reconnected.
 
 ## Want to repeat this? A companion skill
 
-If you use [Claude Code](https://claude.com/claude-code), this repo also ships a
-**`contentful-to-strapi-migration` agent skill** that walks an agent through the steps
-above: confirm the Strapi destination, copy in the migration tool, adapt the field
-mapping, run it, and verify.
+If you use [Claude Code](https://claude.com/claude-code), this repo ships a
+**`contentful-to-strapi-migration` agent skill** at
+[`.claude/skills/contentful-to-strapi-migration/`](./.claude/skills/contentful-to-strapi-migration) —
+Claude Code auto-discovers it when you open the cloned repo. It walks an agent through the
+steps above: confirm the Strapi destination, copy in the migration tool (bundled under the
+skill's `templates/`), adapt the field mapping, run it, and verify.
 
 > **Heads up — this skill is a demo.** It encodes the exact blog model from this post
 > (posts, authors, categories, a landing page). It is meant as a starting point, not a
