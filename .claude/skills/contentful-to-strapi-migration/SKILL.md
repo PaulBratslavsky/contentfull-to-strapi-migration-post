@@ -90,10 +90,18 @@ Strapi field from what's actually in the export**, don't assume. Map by Contentf
 | `Integer` / `Number` | `integer` / `decimal` |
 | `Boolean` | `boolean` |
 | `Date` | `date` / `datetime` |
-| `Object` (JSON) | `json` |
+| `Array` of `Symbol` (e.g. tags) | **a collection type + relation** — promote the values to their own type; see below |
+| `Object` (genuinely opaque/freeform JSON) | `json` |
 | `Link` → `Asset` | single `media` |
 | `Link` → `Entry` | `relation` (manyToOne / oneToMany) |
 | `Array` of `Link`→`Entry` | `relation` (manyToMany / oneToMany) |
+
+**Prefer collections over JSON. Anything enumerable or reusable should be its own collection
+type + relation — not a JSON array.** Tags are the classic case: a Contentful tag field
+(an array of strings) should become a `tag` collection type plus a many-to-many relation, so
+tags are queryable, filterable, and reusable across entries. Reserve `json` for genuinely
+opaque/freeform data that you'll never query by. (During migration this means a "promote to
+collection" pass: collect the unique values, create one entry each, then link them.)
 
 Two rules regardless of model: add a **`contentfulId`** string field to every type (makes the
 migration idempotent), and make a Contentful content type that's used as a single one-off
