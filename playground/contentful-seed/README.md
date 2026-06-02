@@ -40,13 +40,29 @@ migration skill at.
 ## What's inside
 
 - `migrations/001-blog-model.js` — the content model as code (`author`, `category`,
-  `blogPost`, `landingPage`). Re-runnable against a fresh space.
+  `blogPost`, `landingPage`, plus a `product` collection so the example isn't blog-only).
 - `seed.mjs` — creates and publishes the entries and assets via the
   `contentful-management` SDK. Self-contained: it generates its own placeholder images,
   so there are no binary fixtures to manage. Re-running updates existing records
   (deterministic ids) instead of duplicating them.
 
-## Re-running is safe
+## Re-running
 
-Both the model migration and the seed are idempotent, so you can run them repeatedly
-while you experiment.
+`npm run seed` is safe to run again. It reuses the same ids each time, so it updates
+the existing entries and assets instead of creating duplicate ones.
+
+`npm run model` is meant to run once per space. It creates the content types, and
+Contentful refuses to create a type that already exists. Contentful also doesn't track
+which migrations you've already run. So running `npm run model` a second time against
+the same space fails with "Content type ... already exists." That's expected.
+
+To add to the model on a space that already has it, write a small migration that creates
+only the new pieces, and run that once. For example, `002-add-product.js` adds just the
+`product` type:
+
+```bash
+contentful space migration --yes migrations/002-add-product.js
+```
+
+If you'd rather start clean, point the CLI at a brand-new space and run `npm run model`
+there.
