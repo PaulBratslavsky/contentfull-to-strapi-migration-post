@@ -240,6 +240,70 @@ Because it works from *your* model, the skill isn't limited to this blog. Point 
 
 That's the whole idea: the skill *builds* the migration script for you to review and run, you don't hand-write one.
 
+## How the skill works, step by step
+
+The skill follows a fixed pipeline. Every stage runs the same way each time, with one human
+checkpoint in the middle where you review the plan before anything is written to Strapi.
+Here's the run that produced the blog and product catalog above.
+
+**1. It reads your export and your Strapi project.** It detects whether the project is
+TypeScript or JavaScript, so the files it generates match, and it confirms the dev server is
+up.
+
+**2. It analyzes the export and prints a plan** of every content type, every field, and the
+Strapi type it proposes for each:
+
+```text
+Migration plan  (locale: en-US)
+5 content types · 11 entries · 16 assets
+```
+
+It also flags the judgment calls, like a free-text list of tags that could become its own
+collection.
+
+**3. You review the plan. This is the checkpoint.** It's the one place a real decision gets
+made. In this run, both `blogPost.tags` and `product.tags` held plain strings, so the skill
+promoted them into a single shared `tag` collection with relations, instead of leaving them
+as raw JSON. (Collections beat JSON for anything reusable.)
+
+**4. It generates the Strapi schema.** It writes the content-type files (TypeScript here),
+and Strapi's dev server hot-reloads them. Six types appear and their routes go live:
+
+```text
+  + author (collection)
+  + category (collection)
+  + blog-post (collection)
+  + product (collection)
+  + landing-page (single)
+  + tag (collection, promoted)
+```
+
+**5. It sets up read access and a write token.** A bootstrap grants the public role read
+access so you can check the result with `curl`, and you supply a Full access API token for
+the migration to write with.
+
+**6. It hands you the migration script to run.** The skill stops here. You run the script
+yourself, and it works in four passes, then prints a summary:
+
+```text
+[1/4] Uploading assets to the media library...
+[2/4] Promoting tag-like fields to collections...
+[3/4] Creating entries (no cross-entry relations yet)...
+[4/4] Linking relations...
+
+Migration complete:
+  tags          12
+  authors        2
+  categories     3
+  blog-posts     3
+  landing-page   1
+  products       2
+```
+
+That's the whole pipeline: analyze, review, generate, then run. The only step that needs
+your judgment is the review in the middle. Everything else is identical on every run, which
+is what makes the result predictable.
+
 ## Part 3 — What the skill handles for you
 
 You don't have to write any of this. But it's worth seeing what the skill does behind the
