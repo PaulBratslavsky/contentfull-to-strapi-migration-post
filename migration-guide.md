@@ -190,6 +190,8 @@ The commands reuse the credentials from your `contentful login` in setup, so the
 else to configure. Open your space in the Contentful web app and you'll see the seeded
 blog; `playground/contentful-seed/export/export.json` is what you hand to the skill in Part 2.
 
+![contentful-demo-data.png](img/contentful-demo-data.png)
+
 ## Part 2 — Migrate into Strapi with the skill
 
 **Goal of this section:** stand up a Strapi v5 project and hand the migration to the
