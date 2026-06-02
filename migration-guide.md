@@ -411,6 +411,8 @@ That's it. **Your whole site now lives in Strapi**: the blog (posts, authors, ca
 images, and the landing page) and the product catalog (with tags as a real relation), with
 formatted text as Strapi Blocks and every relationship reconnected.
 
+![migrated-content.png](./img/migrated-content.png)
+
 ## Make the skill your own
 
 The skill ships in this repo at [`.claude/skills/contentful-to-strapi-migration/`](./.claude/skills/contentful-to-strapi-migration),
