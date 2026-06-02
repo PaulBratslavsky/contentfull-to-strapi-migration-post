@@ -207,7 +207,15 @@ cd my-strapi-blog
 npm run develop  
 ```
 
+Create your first admin user.
+
+![create-admin-user.png](img/create-admin-user.png)
+
+Once you login, you weill be greeted with the dashboard.
+
 Leave it running; the admin panel is at `http://localhost:1337/admin`.
+
+![strapi-dashboard.png](img/strapi-dashboard.png)
 
 **Step 2.2: Run the skill.** With the Strapi dev server still running, open
 [Claude Code](https://claude.com/claude-code) **at the repo root**. From there it can see
@@ -224,11 +232,11 @@ Here's what the skill does for you, start to finish:
 1. **Reads your Contentful model** from the export: every content type, field, and relationship.
 2. **Creates matching Strapi content types**, picking the right field for each: a **Rich text (Blocks)** field for rich text, single **media** fields for images, **relations** for references, a **single type** for one-off pages like the landing page, and a `contentfulId` on every type so the migration can re-run safely. (For our sample that's `blog-post`, `author`, `category`, and `product` collections, a `landing-page` single type, and a `tag` collection the skill promotes from the products' free-text tags.)
 3. **Sets up access**: a write API token plus public read on the new types, so you can check the result with a plain `curl`.
-4. **Builds the migration for your data** on top of a tested engine (rich-text→Blocks conversion, asset upload, a Strapi REST client) that ships with the skill, then **runs it** and prints a summary of what moved.
+4. **Generates the migration script for your data** on top of a tested engine (rich-text→Blocks conversion, asset upload, a Strapi REST client) that ships with the skill, then **hands you the exact command to run it.** It doesn't run automatically, so you can open the script and config and review them first. When you run it, it prints a summary of what moved.
 
 Because it works from *your* model, the skill isn't limited to this blog. Point it at any Contentful space and it shapes both the Strapi content types and the migration to match.
 
-That's the whole idea: the skill *builds* the migration, you don't hand-write one.
+That's the whole idea: the skill *builds* the migration script for you to review and run, you don't hand-write one.
 
 ## Part 3 — What the skill handles for you
 
@@ -320,7 +328,15 @@ Then, in [Claude Code](https://claude.com/claude-code), run the skill:
 Use the contentful-to-strapi-migration skill to migrate my Contentful export at
 playground/contentful-seed/export/export.json into the Strapi project at ./my-strapi-blog
 (running at http://localhost:1337). Create the content types, set up a write API token,
-run the migration, and show me what came across.
+and generate the migration script for me to review and run.
+```
+
+The skill stops once the script is ready. Review `migrate/migrate.js` and the generated
+`migration.config.json`, then run it yourself:
+
+```bash
+cd migrate
+node migrate.js --export ../playground/contentful-seed/export/export.json --config migration.config.json
 ```
 
 ```bash

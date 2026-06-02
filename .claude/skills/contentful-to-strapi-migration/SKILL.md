@@ -28,8 +28,8 @@ the mechanical parts the same way every time, and the only model-specific input 
 **`migration.config.json`** that you review before anything touches Strapi.
 
 ```
-analyze  →  review config  →  generate schema  →  run migration  →  verify
-(code)      (you + LLM)        (code)              (code)            (code)
+analyze  →  review config  →  generate schema  →  hand off script  →  user runs it  →  verify
+(code)      (you + LLM)        (code)              (skill stops)       (the user)        (code)
 ```
 
 The engine solves the three things that make CMS migrations hard, for any model:
@@ -110,16 +110,21 @@ server**; wait for the reload and poll `/api/<plural>`.
 `node <project>/scripts/create-api-token.mjs` (or the admin panel → Settings → API Tokens →
 Full access). Put it in `migrate/.env` as `STRAPI_API_TOKEN`.
 
-### 6. Run the migration — *the user triggers it*
+### 6. Hand off the migration script — *do not run it yourself*
 
-Hand the user the command (don't run it for them unless they ask, so they can review/modify):
+At this point the migration script (`migrate/migrate.js`) and its reviewed
+`migration.config.json` are in the project. **Stop here.** Do not execute the migration.
+Instead, tell the user it's ready, point them at the script and config to review, and give
+them the exact command to run themselves:
 
 ```bash
 node migrate.js --export <export.json> --config migration.config.json
 ```
 
-It uploads every asset, creates every entry, then wires relations in a second pass —
-idempotent via `contentfulId`, so re-running updates instead of duplicating.
+Run it for them only if they explicitly ask. The point of generating the script (rather than
+running it) is that the user reads and edits it first. When they do run it, it uploads every
+asset, creates every entry, then wires relations in a second pass, idempotent via
+`contentfulId`, so re-running updates instead of duplicating.
 
 ### 7. Verify
 
