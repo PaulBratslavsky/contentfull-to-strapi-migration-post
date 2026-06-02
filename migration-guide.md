@@ -1,7 +1,7 @@
 **TL;DR**
 
-- By the end, you'll have moved a whole blog — landing page, posts, authors, categories, and images — out of **Contentful** and into **Strapi**, and you'll have done it yourself.
-- You won't write migration code. You point an AI skill (for [Claude Code](https://claude.com/claude-code)) at your Contentful content, and it does the move for you.
+- By the end, you'll have moved a whole site — a blog (landing page, posts, authors, categories) **and a product catalog** — out of **Contentful** and into **Strapi**, and you'll have done it yourself.
+- You won't write migration code. You point an AI skill (for [Claude Code](https://claude.com/claude-code)) at your Contentful content, and it reads your model and does the move — blog, products, or whatever you've got.
 - Everything comes across: your formatted text, your images, and the links between things — which post belongs to which author and category, which posts are featured on the home page.
 - The takeaway: with today's AI tools, leaving Contentful isn't a scary engineering project anymore.
 - The repo gives you a sample Contentful space to practice on plus the skill that does the migration, so you can try the whole thing start to finish.
@@ -153,9 +153,12 @@ It costs nothing and buys two things: the migration becomes **idempotent** (re-r
 
 ## Part 1 — Seed a sample Contentful space
 
-**Goal of this section:** end up with a Contentful space holding a small sample blog (three
-posts, two authors, three categories, a landing page, and images), then export it to a file
-we can migrate.
+**Goal of this section:** end up with a Contentful space holding a small sample site — a blog
+(three posts, two authors, three categories, a landing page, images) **and a product catalog**
+(a couple of products with price, SKU, image, and tags) — then export it to a file we can
+migrate. The product collection is there on purpose: it shows the skill reads *your* model and
+isn't limited to a blog. (It even promotes the products' free-text `tags` into their own
+`tag` collection on the Strapi side.)
 
 The seed project already lives in `playground/contentful-seed/`. Run these four commands in
 order:
@@ -196,11 +199,7 @@ both your export and the Strapi project, and the skill (shipped at
 prompt with the two paths:
 
 ```text
-Use the contentful-to-strapi-migration skill to migrate my Contentful export into Strapi.
-The export is at playground/contentful-seed/export/export.json and its downloaded images
-are in playground/contentful-seed/export/. My Strapi v5 project is at ./my-strapi-blog,
-running at http://localhost:1337. Create the content types, set up a write API token, run
-the migration, then show me the migrated posts.
+Use the contentful-to-strapi-migration skill to migrate my Contentful export into Strapi. The export is at playground/contentful-seed/export/export.json and its downloaded images are in playground/contentful-seed/export/. My Strapi v5 project is at ./my-strapi-blog, running at http://localhost:1337. Create the content types, set up a write API token, and create a migration script that I can run. 
 ```
 
 Here's what the skill does for you, start to finish:
@@ -210,8 +209,8 @@ Here's what the skill does for you, start to finish:
 3. **Sets up access** — a write API token plus public read on the new types, so you can check the result with a plain `curl`.
 4. **Builds the migration for your data** on top of a tested engine (rich-text→Blocks conversion, asset upload, a Strapi REST client) that ships with the skill, then **runs it** and prints a summary of what moved.
 
-Because it works from *your* model, the skill isn't limited to this blog — point it at any
-Contentful space and it shapes both the Strapi content types and the migration to match.
+Because it works from *your* model, the skill isn't limited to this blog — point it at any Contentful space and it shapes both the Strapi content types and the migration to  match.
+
 That's the whole idea: the skill *builds* the migration, you don't hand-write one.
 
 ## Part 3 — What the skill handles for you

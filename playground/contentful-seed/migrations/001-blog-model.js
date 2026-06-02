@@ -1,12 +1,13 @@
 /**
- * Contentful migration DSL: creates the blog content model.
+ * Contentful migration DSL: creates the sample content model — a blog (author,
+ * category, blog post, landing page) PLUS a product collection, so the example
+ * shows the migration handling more than just blog content.
  *
  * Run with the Contentful CLI:
  *   contentful space migration migrations/001-blog-model.js
  *
  * This is reproducible and version-controllable — re-running against a fresh
- * space recreates the exact same model. Mirrors the content types the Strapi
- * destination expects.
+ * space recreates the exact same model.
  */
 module.exports = function (migration) {
   // --- Author --------------------------------------------------------------
@@ -79,4 +80,23 @@ module.exports = function (migration) {
       linkType: 'Entry',
       validations: [{ linkContentType: ['blogPost'] }],
     });
+
+  // --- Product (an e-commerce-style type, to show this isn't blog-only) -----
+  const product = migration
+    .createContentType('product')
+    .name('Product')
+    .displayField('title');
+  product.createField('title').name('Title').type('Symbol').required(true);
+  product
+    .createField('slug')
+    .name('Slug')
+    .type('Symbol')
+    .required(true)
+    .validations([{ unique: true }]);
+  product.createField('description').name('Description').type('Text');
+  product.createField('price').name('Price').type('Number');
+  product.createField('sku').name('SKU').type('Symbol');
+  product.createField('image').name('Image').type('Link').linkType('Asset');
+  // Array<Symbol> — the skill can PROMOTE this to its own `tag` collection + relation.
+  product.createField('tags').name('Tags').type('Array').items({ type: 'Symbol' });
 };

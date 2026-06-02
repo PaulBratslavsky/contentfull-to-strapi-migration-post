@@ -130,6 +130,8 @@ const ASSETS = [
   { id: 'asset-diagram', file: 'architecture-diagram.png', title: 'Migration architecture diagram', color: [100, 116, 139], size: [900, 500] },
   { id: 'asset-avatar-jane', file: 'jane.png', title: 'Jane Doe avatar', color: [219, 39, 119], size: [256, 256] },
   { id: 'asset-avatar-sam', file: 'sam.png', title: 'Sam Rivera avatar', color: [13, 148, 136], size: [256, 256] },
+  { id: 'asset-product-mug', file: 'mug.png', title: 'Strapi mug', color: [37, 99, 235], size: [600, 600] },
+  { id: 'asset-product-tee', file: 'tee.png', title: 'Headless tee', color: [16, 185, 129], size: [600, 600] },
 ];
 
 const AUTHORS = [
@@ -209,6 +211,29 @@ const LANDING = {
   heroImage: 'asset-hero',
   featuredPosts: ['post-migration', 'post-astro'],
 };
+
+const PRODUCTS = [
+  {
+    id: 'product-mug',
+    title: 'Strapi Mug',
+    slug: 'strapi-mug',
+    description: 'A 12oz ceramic mug for your morning build logs.',
+    price: 14.0,
+    sku: 'MUG-001',
+    image: 'asset-product-mug',
+    tags: ['drinkware', 'ceramic'],
+  },
+  {
+    id: 'product-tee',
+    title: 'Headless Tee',
+    slug: 'headless-tee',
+    description: 'Soft cotton t-shirt for the API-first crowd.',
+    price: 28.0,
+    sku: 'TEE-001',
+    image: 'asset-product-tee',
+    tags: ['apparel', 'cotton'],
+  },
+];
 
 // --- helpers to create-or-update + publish ---------------------------------
 const assetLink = (id) => ({ sys: { type: 'Link', linkType: 'Asset', id } });
@@ -301,7 +326,20 @@ async function main() {
     featuredPosts: LANDING.featuredPosts.map(entryLink),
   });
 
-  console.log('\nDone. Your Contentful space now has the sample blog.');
+  console.log('Creating products...');
+  for (const p of PRODUCTS) {
+    await upsertEntry(env, 'product', p.id, {
+      title: p.title,
+      slug: p.slug,
+      description: p.description,
+      price: p.price,
+      sku: p.sku,
+      image: assetLink(p.image),
+      tags: p.tags,
+    });
+  }
+
+  console.log('\nDone. Your Contentful space now has the sample blog + products.');
   console.log('Export it for the migration with:  npm run export');
 }
 
