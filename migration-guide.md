@@ -396,7 +396,7 @@ curl http://localhost:1337/api/landing-page   # hero + featured posts
 curl http://localhost:1337/api/products       # products with price, SKU, image, tag relations
 ```
 
-!
+![migrated-content.png](img/migrated-content.png)
 
 Open a post's `body` and you'll see Strapi Blocks, with any in-body image pointing at a
 `/uploads/...` URL on your own server. Run the migration again and the counts stay the
