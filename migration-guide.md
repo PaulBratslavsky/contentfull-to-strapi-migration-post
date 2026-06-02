@@ -154,8 +154,11 @@ Before writing any code, map the concepts. Most of a migration is just deciding 
 | Asset (on the CDN)     | Media (Upload library) | Must be re-uploaded; URLs change.               |
 | Reference (Link)       | Relation               | Reconnected after entries exist.                |
 | Rich Text (JSON AST)   | Rich text (Blocks)     | The skill converts the tree into Strapi's native block format. |
+| Array of strings (tags) | Collection + relation | Free-text lists are promoted to their own type so they're reusable. |
 
-For our blog that means four Strapi types: `blog-post`, `author`, and `category` as **collection types**, and `landing-page` as a **single type**.
+For our sample that means: `blog-post`, `author`, `category`, and `product` as **collection
+types**; `landing-page` as a **single type**; and a `tag` collection the skill promotes from
+the products' free-text tags.
 
 ### One extra field that makes life easy: `contentfulId`
 
@@ -217,7 +220,7 @@ Use the contentful-to-strapi-migration skill to migrate my Contentful export int
 Here's what the skill does for you, start to finish:
 
 1. **Reads your Contentful model** from the export: every content type, field, and relationship.
-2. **Creates matching Strapi content types**, picking the right field for each: a **Rich text (Blocks)** field for rich text, single **media** fields for images, **relations** for references, a **single type** for one-off pages like the landing page, and a `contentfulId` on every type so the migration can re-run safely. (For our sample that's `blog-post`, `author`, `category`, and a `landing-page` single type.)
+2. **Creates matching Strapi content types**, picking the right field for each: a **Rich text (Blocks)** field for rich text, single **media** fields for images, **relations** for references, a **single type** for one-off pages like the landing page, and a `contentfulId` on every type so the migration can re-run safely. (For our sample that's `blog-post`, `author`, `category`, and `product` collections, a `landing-page` single type, and a `tag` collection the skill promotes from the products' free-text tags.)
 3. **Sets up access**: a write API token plus public read on the new types, so you can check the result with a plain `curl`.
 4. **Builds the migration for your data** on top of a tested engine (rich-text→Blocks conversion, asset upload, a Strapi REST client) that ships with the skill, then **runs it** and prints a summary of what moved.
 
@@ -237,8 +240,8 @@ images over, create the entries, then connect them up.
 ```mermaid
 flowchart TD
     A[Read your Contentful export] --> B[Upload every image to Strapi's media library]
-    B --> C[Create the authors, categories, and posts]
-    C --> D[Reconnect each post to its author and category]
+    B --> C[Create the authors, categories, posts, and products]
+    C --> D[Reconnect posts to authors/categories and products to tags]
     D --> E[Build the landing page: hero image + featured posts]
 ```
 
@@ -269,8 +272,10 @@ for exactly that.
 In Contentful, a post points at its author and category, and the home page points at its
 featured posts. The skill creates every entry first, remembers where each one landed, then
 reconnects those relationships, so a post always finds its author and the home page finds
-its featured posts. And because every migrated entry remembers where it came from, you can
-re-run the whole migration as often as you like without ever creating duplicates.
+its featured posts. The product catalog works the same way: each product reconnects to the
+`tag` records the skill promoted from its free-text tags, so a list of strings becomes a
+real, reusable relation. And because every migrated entry remembers where it came from, you
+can re-run the whole migration as often as you like without ever creating duplicates.
 
 ## Verify it worked
 
@@ -280,6 +285,7 @@ API:
 ```bash
 curl http://localhost:1337/api/blog-posts        # each post has its author, category, and cover image
 curl http://localhost:1337/api/landing-page      # hero image + featured posts
+curl http://localhost:1337/api/products          # each product has price, SKU, image, and tag relations
 ```
 
 Open a post's `body` and you'll see Strapi Blocks, with any in-body image pointing at a
@@ -312,17 +318,19 @@ Then, in [Claude Code](https://claude.com/claude-code), run the skill:
 Use the contentful-to-strapi-migration skill to migrate my Contentful export at
 playground/contentful-seed/export/export.json into the Strapi project at ./my-strapi-blog
 (running at http://localhost:1337). Create the content types, set up a write API token,
-run the migration, and show me the migrated posts.
+run the migration, and show me what came across.
 ```
 
 ```bash
 # Verify
 curl http://localhost:1337/api/blog-posts     # posts with author, category, cover image
 curl http://localhost:1337/api/landing-page   # hero + featured posts
+curl http://localhost:1337/api/products       # products with price, SKU, image, tag relations
 ```
 
-That's it. **Your blog now lives in Strapi**: posts, authors, categories, images, and the
-landing page, with formatted text as Strapi Blocks and every relationship reconnected.
+That's it. **Your whole site now lives in Strapi**: the blog (posts, authors, categories,
+images, and the landing page) and the product catalog (with tags as a real relation), with
+formatted text as Strapi Blocks and every relationship reconnected.
 
 ## Make the skill your own
 
