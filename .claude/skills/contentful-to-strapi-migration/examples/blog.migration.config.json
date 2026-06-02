@@ -1,0 +1,30 @@
+{
+  "locale": "en-US",
+  "types": {
+    "author": {
+      "singularName": "author",
+      "pluralName": "authors",
+      "displayName": "Author",
+      "kind": "collection"
+    },
+    "category": {
+      "singularName": "category",
+      "pluralName": "categories",
+      "displayName": "Category",
+      "kind": "collection"
+    },
+    "blogPost": {
+      "singularName": "blog-post",
+      "pluralName": "blog-posts",
+      "displayName": "Blog Post",
+      "kind": "collection"
+    },
+    "landingPage": {
+      "singularName": "landing-page",
+      "pluralName": "landing-pages",
+      "displayName": "Landing Page",
+      "kind": "single"
+    }
+  },
+  "promote": {}
+}

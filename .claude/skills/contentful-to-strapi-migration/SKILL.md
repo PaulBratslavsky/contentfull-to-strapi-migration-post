@@ -5,208 +5,163 @@ description: >-
   Strapi v5 instance. Use when the user wants to move, migrate, import, or
   transfer content from Contentful to Strapi, or says "migrate from contentful to
   strapi", "import my contentful content into strapi", "move my contentful space
-  to strapi", or similar. Reads the Contentful export, derives matching Strapi
-  content types for that model, and generates + runs a migration on a reusable
-  engine — converting rich text to Strapi Blocks, re-uploading assets to the media
-  library, and reconnecting relations in two passes.
+  to strapi", or similar. Works for ANY Contentful model: it reads the export,
+  derives matching Strapi content types, generates the schema in the Strapi
+  project, and produces a migration script (entries + file uploads via the Strapi
+  API, rich text -> Blocks, two-pass relations) for the user to run.
 compatibility: Requires Node.js 18.18+ and a Strapi v5 project.
 ---
 
 # Contentful → Strapi Migration
 
-> **What this skill is: a generator.** It reads your Contentful export, derives the matching
-> Strapi content types, and **writes a migration script you can run or modify** — built on a
-> reusable engine so the hard parts are already solved. It does **not** hard-code a model or
-> run anything behind your back: the bundled blog (posts, authors, categories, landing page)
-> is just a worked example, and **you trigger the generated script yourself**. New to building
-> skills? See Strapi's primer: https://strapi.io/blog/what-are-agent-skills-and-how-to-use-them
+> **What this skill is: a generator, not a hard-coded migrator.** Point it at *any*
+> Contentful export. It reads your model, derives matching Strapi content types, builds the
+> schema in your Strapi project, and generates a migration script you review, run, and modify.
+> Nothing about a specific model is hard-coded; the engine is reusable and the per-model
+> decisions live in one small, reviewable config. New to building skills? See Strapi's primer:
+> https://strapi.io/blog/what-are-agent-skills-and-how-to-use-them
 
-Given a Contentful **export** (`contentful export` output), the skill helps you produce a
-Strapi v5 destination and a migration script for **your** model, solving the three things
-that make CMS migrations hard:
+## How it works — a deterministic pipeline
 
-1. **Rich text** — Contentful's JSON AST is converted to Strapi **Blocks**.
-2. **Assets** — downloaded from Contentful's CDN (or the export folder) and re-uploaded to
-   Strapi's media library.
-3. **Relations** — reconnected in a two-pass run using a `contentfulId → documentId` map.
+Flexibility *and* predictability come from splitting the work: a **fixed, tested engine** does
+the mechanical parts the same way every time, and the only model-specific input is a small
+**`migration.config.json`** that you review before anything touches Strapi.
 
-Everything it needs is bundled under `templates/`:
+```
+analyze  →  review config  →  generate schema  →  run migration  →  verify
+(code)      (you + LLM)        (code)              (code)            (code)
+```
+
+The engine solves the three things that make CMS migrations hard, for any model:
+**rich text → Strapi Blocks**, **assets → media library (uploaded, then linked)**, and
+**relations → reconnected in two passes** (idempotent via a `contentfulId` field).
+
+Bundled:
 
 ```
 templates/
-├── strapi/                 # the destination content types (drop into a Strapi v5 project)
-│   ├── src/api/{blog-post,author,category,landing-page}/   # schema.json + controller/route/service/middleware (.ts)
-│   ├── src/index.ts        # bootstrap: grants the public role read access
-│   └── scripts/create-api-token.mjs   # mint a full-access token headlessly
-└── migrate/                # the migration tool (standalone Node ESM)
-    ├── migrate.js          # worked-example orchestrator — your generated script mirrors this shape
-    ├── lib/{contentful,richtext,assets,strapi}.js
-    ├── package.json
-    └── .env.example
+├── migrate/                # the reusable ENGINE (you run these; no per-model code)
+│   ├── analyze.js          # inspect an export → migration plan + starter config
+│   ├── generate.js         # write Strapi content types from export + config
+│   ├── migrate.js          # move data: entries + file uploads via the Strapi API
+│   ├── lib/{contentful,richtext,assets,strapi}.js
+│   ├── package.json · .env.example
+└── strapi/
+    ├── src/index.ts        # GENERIC public-read bootstrap (drop into the project)
+    └── scripts/create-api-token.mjs   # mint a full-access token
+references/strapi-content-modeling.md  # components vs dynamic zones vs relations
+examples/blog.migration.config.json    # a sample config (reference)
 ```
 
-> **Match the project's language — this is the #1 gotcha.** The bundled content-type files
-> are **TypeScript** (`.ts`), because `create-strapi-app` defaults to TypeScript. A TypeScript
-> Strapi project compiles `src/` to `dist/` and **silently drops stray `.js` files** (its
-> tsconfig doesn't enable `allowJs`) — so `.js` controllers/routes never reach `dist`, the
-> content type registers but has **no routes**, and `/api/...` returns 404. If the target
-> project is **JavaScript** instead (`src/index.js`, no `tsconfig.json`), rename these files
-> to `.js` and drop the type annotations — they're one-line factory wrappers. Always check
-> first: does the project have `tsconfig.json` / `src/index.ts` (TS) or `src/index.js` (JS)?
->
-> Write **idiomatic Strapi v5 TypeScript** in a TS project — `import { factories } from '@strapi/strapi'` with `export default factories.createCoreController('api::x.x')`, not CommonJS `require`/`module.exports`. (The bundled `.ts` files already follow this; keep generated ones consistent.)
+## Prerequisites
 
-> **Tip:** enable the [Strapi docs MCP](https://docs.strapi.io/cms/ai/docs-mcp-server)
-> (`https://strapi-docs.mcp.kapa.ai`) and verify Strapi specifics against it as you go
-> (content-type file conventions, the Blocks field shape, the permissions API). Prefix a
-> query with "Use the strapi-docs MCP server to answer:" so it uses current docs.
-
-## Prerequisites to confirm with the user
-
-1. **A Strapi v5 project.** If they don't have one, scaffold it:
-   `npx create-strapi-app@latest my-strapi-blog --non-interactive` (TypeScript) — or add
-   `--js` for a JavaScript project. Match the content-type file extensions to whichever you
-   pick (see the gotcha above). A freshly generated project writes its own working `.env`.
-2. **A Contentful export.** Either they already have one, or produce it with the CLI
-   (after `contentful login` + `contentful space use`):
-   ```bash
-   contentful space export --content-file export.json --download-assets
-   ```
-   This writes `export.json` plus a folder of downloaded asset files.
+1. **A running Strapi v5 project.** If there isn't one, scaffold it:
+   `npx create-strapi-app@latest my-strapi-blog --non-interactive` then `npm run develop`
+   (add `--js` for a JavaScript project). The migration writes *into* this project; it does
+   not create the Strapi app.
+2. **A Contentful export** — `contentful space export --content-file export.json --download-assets`
+   (after `contentful login` + `contentful space use`).
 
 ## Steps
 
-### Step 1 — Create the content types (derive them from the export)
+### 1. Set up the engine + project files
 
-**Read `export.json`'s `contentTypes` and create matching Strapi content types — choose each
-Strapi field from what's actually in the export**, don't assume. Map by Contentful field type:
+- Copy `templates/migrate/` into the project (e.g. `./migrate`), then `cd migrate && npm install`
+  and `cp .env.example .env` (set `STRAPI_URL`, `STRAPI_API_TOKEN`, `CONTENTFUL_LOCALE`).
+- Copy `templates/strapi/src/index.ts` → `<project>/src/index.ts` (generic public-read bootstrap)
+  and `templates/strapi/scripts/create-api-token.mjs` → `<project>/scripts/`. **Match the
+  extension to the project** (`.ts` for TS, `.js` for JS — see the gotcha below).
 
-| Contentful field | Strapi field |
+### 2. Analyze the export
+
+```bash
+node analyze.js --export <export.json> --out migration.config.json
+```
+
+Prints the plan — every content type, every field's proposed Strapi mapping, and **flags the
+judgment calls** (single-type candidates, tag-like `Array<Symbol>` fields, relations) — and
+writes a starter `migration.config.json`.
+
+### 3. Review & refine the config — *the gate*
+
+Edit `migration.config.json` **before generating anything**, and show the plan to the user:
+
+- `kind: "single"` for one-off pages (homepage, global settings); `"collection"` otherwise.
+- `promote`: keep tag-like `Array<Symbol>` fields as collections + relations (recommended —
+  collections beat JSON arrays for anything reusable), or remove an entry to leave it as `json`.
+- Adjust `singularName` / `pluralName` / `displayName` as desired.
+- For **composed/modular content** (references used as page sections, rich text with embedded
+  entries), decide components vs dynamic zones vs relations using
+  [`references/strapi-content-modeling.md`](references/strapi-content-modeling.md), and extend
+  the generated schema accordingly.
+
+### 4. Generate the Strapi schema
+
+```bash
+node generate.js --export <export.json> --config migration.config.json --out <strapi-project> [--js]
+```
+
+Writes the content-type files (`.ts` by default; `--js` for a JavaScript project). Strapi
+`develop` mode **auto-reloads** when the files appear — **don't restart or kill the user's
+server**; wait for the reload and poll `/api/<plural>`.
+
+### 5. Get a write API token
+
+`node <project>/scripts/create-api-token.mjs` (or the admin panel → Settings → API Tokens →
+Full access). Put it in `migrate/.env` as `STRAPI_API_TOKEN`.
+
+### 6. Run the migration — *the user triggers it*
+
+Hand the user the command (don't run it for them unless they ask, so they can review/modify):
+
+```bash
+node migrate.js --export <export.json> --config migration.config.json
+```
+
+It uploads every asset, creates every entry, then wires relations in a second pass —
+idempotent via `contentfulId`, so re-running updates instead of duplicating.
+
+### 7. Verify
+
+- `GET /api/<plural>?populate=*` for the types; confirm fields, media, Blocks bodies, and relations.
+- Re-running the migration leaves counts unchanged.
+
+## Field mapping (what `analyze`/`generate` apply)
+
+| Contentful | Strapi |
 |---|---|
-| `Symbol` (short text) | `string` (or `uid` for a slug) |
-| `Text` (long text) | `text` |
-| `RichText` | **Rich text (Blocks)** (`"type": "blocks"`) — converted by `richTextToBlocks` |
+| `Symbol` | `string` (or `uid` for a `slug`) |
+| `Text` | `text` |
+| `RichText` | **`blocks`** (converted by `richTextToBlocks`) |
 | `Integer` / `Number` | `integer` / `decimal` |
-| `Boolean` | `boolean` |
-| `Date` | `date` / `datetime` |
-| `Array` of `Symbol` (e.g. tags) | **a collection type + relation** — promote the values to their own type; see below |
-| `Object` (genuinely opaque/freeform JSON) | `json` |
-| `Link` → `Asset` | single `media` |
-| `Link` → `Entry` | `relation` (manyToOne / oneToMany) |
-| `Array` of `Link`→`Entry` | `relation` (manyToMany / oneToMany) |
+| `Boolean` / `Date` | `boolean` / `datetime` |
+| `Object` / `Location` | `json` |
+| `Array<Symbol>` | `json`, or **promote to a collection + relation** (preferred for tags) |
+| `Link`→`Asset` / `Array`→`Asset` | single / multiple `media` |
+| `Link`→`Entry` / `Array`→`Entry` | `relation` (manyToOne / manyToMany) |
 
-**Prefer collections over JSON. Anything enumerable or reusable should be its own collection
-type + relation — not a JSON array.** Tags are the classic case: a Contentful tag field
-(an array of strings) should become a `tag` collection type plus a many-to-many relation, so
-tags are queryable, filterable, and reusable across entries. Reserve `json` for genuinely
-opaque/freeform data that you'll never query by. (During migration this means a "promote to
-collection" pass: collect the unique values, create one entry each, then link them.)
+## Strapi v5 rules the engine bakes in
 
-Two rules regardless of model: add a **`contentfulId`** string field to every type (makes the
-migration idempotent), and make a Contentful content type that's used as a single one-off
-page (e.g. a landing page) a Strapi **single type**. Keep the schema's rich-text field as
-`blocks` so it agrees with the `richTextToBlocks` converter — a Blocks value written to a
-`richtext` (Markdown) field will error.
-
-When the model is richer than flat fields — reusable field groups, page-builder layouts,
-mixed/modular sections — read **[`references/strapi-content-modeling.md`](references/strapi-content-modeling.md)**
-to choose well between **components**, **dynamic zones**, and **relations** (and single vs
-collection types). The short version: a reused standalone entity → relation to a collection
-type; a repeated/reused field group → component; a page of varied reorderable sections →
-dynamic zone of components.
-
-For **this sample blog**, that derivation produces exactly what's in `templates/strapi/` —
-`blog-post`, `author`, `category` (collection types) and `landing-page` (single type), with a
-Blocks `body`, single `media` for `coverImage`/`avatar`/`heroImage`, and relations for
-`author`/`category`/`featuredPosts`. So for the sample you can copy the templates directly;
-for any other model, generate the schemas from the export using the table above and the same
-conventions. Either way also drop in `src/index.ts` (public-read bootstrap) and
-`scripts/create-api-token.mjs`. (Templates are `.ts`; for a JS project use `.js` — see the
-gotcha above.)
-
-**Don't restart or kill the user's dev server.** In `develop` mode Strapi **auto-reloads**
-when you add these files — just wait for the reload and poll `/api/<plural>` to confirm the
-routes are live. If the server isn't running (or not in develop mode), ask the user to start
-it with `npm run develop` rather than launching or relaunching it yourself. On boot/reload,
-`src/index.ts` grants the public role `find`/`findOne` so you can verify without logging in.
-
-> Adapting to a different model? Edit/replace these schema files (and the `COLLECTION` map in
-> Step 3) to match — keep a `contentfulId` field on every type.
-
-### Step 2 — Get a write API token
-
-Either create one in the admin panel (Settings → API Tokens → *Full access*), or mint one
-headlessly with the bundled helper:
-
-```bash
-node scripts/create-api-token.mjs        # prints a full-access token
-```
-
-### Step 3 — Write the migration script for *this* model
-
-The point of the skill is to **generate the migration script from the user's content
-structure** — not to hand them a fixed one. What's bundled is a reusable **engine** plus a
-worked example; you supply the orchestration for their model.
-
-Copy the engine into the project (e.g. a `migrate/` directory) and install it:
-
-```bash
-cd migrate
-cp .env.example .env     # set STRAPI_URL, STRAPI_API_TOKEN, CONTENTFUL_LOCALE
-npm install
-```
-
-- **`lib/` is the reusable engine — don't rewrite it.** `contentful.js` (reads the
-  locale-nested export), `richtext.js` (`richTextToBlocks` — the genuinely hard part),
-  `assets.js` (download → upload to the media library), `strapi.js` (v5 REST client:
-  `documentId`, relation `connect`/`set`, media-by-id, two-step upload).
-- **`migrate.js` is the orchestrator you write/adapt for the model.** It's the script that
-  knows *this* user's content types. The bundled one targets the sample blog — for the sample
-  use it as-is; **for any other model, generate `migrate.js` from the export** following the
-  same shape:
-  1. **Pass 0 — assets:** `migrateAssets(...)` → a map of Contentful asset id → Strapi media object.
-  2. **Pass 1 — entries (no cross-entry relations yet):** for each content type, build the
-     Strapi `data` with the helpers (`field`, `linkId`, `richTextToBlocks` for rich text,
-     `mediaValue` for single media), upsert by `contentfulId`, and record
-     `contentfulId → documentId` in an id map.
-  3. **"Promote to collection" pass (if needed):** for tag-like arrays of strings, create one
-     entry per unique value and remember its `documentId` (see the collections-over-JSON rule).
-  4. **Pass 2 — relations:** now that every entry exists, set the entry relations
-     (`{ field: { set: [documentId] } }`) and single-type relations using the id maps.
-  Keep it idempotent (upsert by `contentfulId`) and print a summary.
-
-### Step 4 — Hand the script to the user to run
-
-Don't run the migration yourself — **give the user the command and let them trigger it**, so
-they can review or tweak the generated script first:
-
-```bash
-node migrate.js --export /path/to/export.json --assets-dir /path/to/export-folder
-```
-
-It runs in passes (assets → entries → relations → single types) and prints a summary table.
-(Only run it for them if they explicitly ask.)
-
-### Step 5 — Verify (after they've run it)
-
-- `GET /api/<plural>` for each type; confirm relations, media, and Blocks bodies are present.
-- Open a rich-text body and confirm in-text images point at Strapi `/uploads/...` URLs, not
-  `images.ctfassets.net`.
-- Re-running the script leaves counts unchanged (idempotent via `contentfulId`).
-
-## Strapi v5 rules baked into the tool
-
-- Entries are addressed by **`documentId`** (a string), not the numeric `id`.
-- **Media fields** are set with the numeric file id directly (`coverImage: 12`), NOT
-  `{ connect: [...] }`. Entry **relations** use `{ set: [documentId] }`.
-- You **cannot upload a file while creating an entry** — assets are migrated in a separate
-  first pass.
+- Entries are addressed by **`documentId`** (string), not numeric `id`; responses are flattened.
+- **Media** is set by numeric file id (`coverImage: 12`), NOT relation `connect`. Entry
+  **relations** use `{ set: [documentId] }`.
+- You **can't upload a file while creating an entry** — assets are a separate first pass.
 - A REST `create` with a full-access token returns a **published** entry.
+- **Single types** use the singular API path (`/api/landing-page`), collections use the plural.
+
+> **#1 gotcha — match the project's language.** Generated content-type files must be `.ts` in a
+> TypeScript project (the `create-strapi-app` default) and `.js` in a JavaScript one. A TS build
+> drops stray `.js` from `dist/` (no `allowJs`), so `.js` routes silently 404. Check for
+> `tsconfig.json` / `src/index.ts`; pass `--js` to `generate.js` only for a JS project.
+
+> **Tip:** enable the [Strapi docs MCP](https://docs.strapi.io/cms/ai/docs-mcp-server)
+> (`https://strapi-docs.mcp.kapa.ai`) and verify Strapi specifics against it as you design the
+> schema (field types, Blocks, components, single types). Prefix a query with
+> "Use the strapi-docs MCP server to answer:".
 
 ## When the volume is large
 
-For thousands of entries / gigabytes of assets where you want resumable runs, structured
-logging, and asset-repair out of the box, point the user at the community guide on the Strapi
-blog by Tim Adler and his `strapi_lift` Ruby tool
-(https://strapi.io/blog/migrate-from-contenful-to-strapi). This skill is ideal for
-small-to-medium models and full control over the transformations.
+For thousands of entries / gigabytes of assets with resumable runs, structured logging, and
+asset-repair out of the box, point the user at the community guide on the Strapi blog by Tim
+Adler and his `strapi_lift` tool (https://strapi.io/blog/migrate-from-contenful-to-strapi).
+This skill is ideal for understanding and controlling the migration of small-to-medium models.
