@@ -143,9 +143,13 @@ headlessly with the bundled helper:
 node scripts/create-api-token.mjs        # prints a full-access token
 ```
 
-### Step 3 — Set up the migration tool
+### Step 3 — Write the migration script for *this* model
 
-Copy `templates/migrate/` into the project (e.g. a `migrate/` directory) and configure it:
+The point of the skill is to **generate the migration script from the user's content
+structure** — not to hand them a fixed one. What's bundled is a reusable **engine** plus a
+worked example; you supply the orchestration for their model.
+
+Copy the engine into the project (e.g. a `migrate/` directory) and install it:
 
 ```bash
 cd migrate
@@ -153,13 +157,24 @@ cp .env.example .env     # set STRAPI_URL, STRAPI_API_TOKEN, CONTENTFUL_LOCALE
 npm install
 ```
 
-If the user's model differs from the sample blog, edit `migrate.js`:
-
-- Update the `COLLECTION` map: Contentful content type id → Strapi plural API id
-  (e.g. `blogPost: 'blog-posts'`), and `LANDING_PAGE_SINGLE` (or drop the single-type block).
-- Adjust the field builders in each pass using the helpers: `field(entry, 'id', locale)`,
-  `linkId`/`linkIds` (`lib/contentful.js`), `richTextToMarkdown(doc, { resolveAsset })`
-  (`lib/richtext.js`), and the local `mediaValue(cfAssetId)`.
+- **`lib/` is the reusable engine — don't rewrite it.** `contentful.js` (reads the
+  locale-nested export), `richtext.js` (`richTextToBlocks` — the genuinely hard part),
+  `assets.js` (download → upload to the media library), `strapi.js` (v5 REST client:
+  `documentId`, relation `connect`/`set`, media-by-id, two-step upload).
+- **`migrate.js` is the orchestrator you write/adapt for the model.** It's the script that
+  knows *this* user's content types. The bundled one targets the sample blog — for the sample
+  use it as-is; **for any other model, generate `migrate.js` from the export** following the
+  same shape:
+  1. **Pass 0 — assets:** `migrateAssets(...)` → a map of Contentful asset id → Strapi media object.
+  2. **Pass 1 — entries (no cross-entry relations yet):** for each content type, build the
+     Strapi `data` with the helpers (`field`, `linkId`, `richTextToBlocks` for rich text,
+     `mediaValue` for single media), upsert by `contentfulId`, and record
+     `contentfulId → documentId` in an id map.
+  3. **"Promote to collection" pass (if needed):** for tag-like arrays of strings, create one
+     entry per unique value and remember its `documentId` (see the collections-over-JSON rule).
+  4. **Pass 2 — relations:** now that every entry exists, set the entry relations
+     (`{ field: { set: [documentId] } }`) and single-type relations using the id maps.
+  Keep it idempotent (upsert by `contentfulId`) and print a summary.
 
 ### Step 4 — Run the migration
 
