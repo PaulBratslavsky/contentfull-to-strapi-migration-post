@@ -1,32 +1,31 @@
 ---
 name: contentful-to-strapi-migration
 description: >-
-  Migrate content (blog posts, pages, authors, categories, assets) from
-  Contentful into a Strapi v5 instance. Use when the user wants to move,
-  migrate, import, or transfer content from Contentful to Strapi, or says
-  "migrate from contentful to strapi", "import my contentful content into
-  strapi", "move my contentful space to strapi", or similar. Sets up the
-  destination content types in Strapi and runs a bundled Node migration tool
-  that reads a Contentful export and writes to Strapi over REST, handling rich
-  text -> Markdown, asset re-upload, and two-pass relation linking.
+  Migrate content (entries, rich text, assets, relations) from Contentful into a
+  Strapi v5 instance. Use when the user wants to move, migrate, import, or
+  transfer content from Contentful to Strapi, or says "migrate from contentful to
+  strapi", "import my contentful content into strapi", "move my contentful space
+  to strapi", or similar. Reads the Contentful export, derives matching Strapi
+  content types for that model, and generates + runs a migration on a reusable
+  engine — converting rich text to Strapi Blocks, re-uploading assets to the media
+  library, and reconnecting relations in two passes.
 compatibility: Requires Node.js 18.18+ and a Strapi v5 project.
 ---
 
 # Contentful → Strapi Migration
 
-> **This skill is a demo / starting point, not a universal migrator.** It encodes a
-> specific blog model (blog posts, authors, categories, a landing page). Treat it as a
-> template: copy it, edit the content-type files in `templates/strapi/` and the `COLLECTION`
-> map + field builders in `templates/migrate/migrate.js` to match the user's own model, and
-> adapt it to their use case. New to building skills? See Strapi's primer:
-> https://strapi.io/blog/what-are-agent-skills-and-how-to-use-them
+> **What this skill is: a generator.** It reads your Contentful export, derives the matching
+> Strapi content types, and **writes a migration script you can run or modify** — built on a
+> reusable engine so the hard parts are already solved. It does **not** hard-code a model or
+> run anything behind your back: the bundled blog (posts, authors, categories, landing page)
+> is just a worked example, and **you trigger the generated script yourself**. New to building
+> skills? See Strapi's primer: https://strapi.io/blog/what-are-agent-skills-and-how-to-use-them
 
-This skill takes a Contentful **export** (`contentful export` output) and lands its content
-in **Strapi v5**, end to end: it sets up the destination content types, then runs a small,
-readable Node migration tool. The tool handles the three things that make CMS migrations
-hard:
+Given a Contentful **export** (`contentful export` output), the skill helps you produce a
+Strapi v5 destination and a migration script for **your** model, solving the three things
+that make CMS migrations hard:
 
-1. **Rich text** — Contentful's JSON AST is converted to Markdown.
+1. **Rich text** — Contentful's JSON AST is converted to Strapi **Blocks**.
 2. **Assets** — downloaded from Contentful's CDN (or the export folder) and re-uploaded to
    Strapi's media library.
 3. **Relations** — reconnected in a two-pass run using a `contentfulId → documentId` map.
@@ -40,7 +39,7 @@ templates/
 │   ├── src/index.ts        # bootstrap: grants the public role read access
 │   └── scripts/create-api-token.mjs   # mint a full-access token headlessly
 └── migrate/                # the migration tool (standalone Node ESM)
-    ├── migrate.js          # orchestrator (the COLLECTION map + field builders live here)
+    ├── migrate.js          # worked-example orchestrator — your generated script mirrors this shape
     ├── lib/{contentful,richtext,assets,strapi}.js
     ├── package.json
     └── .env.example
@@ -176,20 +175,24 @@ npm install
      (`{ field: { set: [documentId] } }`) and single-type relations using the id maps.
   Keep it idempotent (upsert by `contentfulId`) and print a summary.
 
-### Step 4 — Run the migration
+### Step 4 — Hand the script to the user to run
+
+Don't run the migration yourself — **give the user the command and let them trigger it**, so
+they can review or tweak the generated script first:
 
 ```bash
 node migrate.js --export /path/to/export.json --assets-dir /path/to/export-folder
 ```
 
 It runs in passes (assets → entries → relations → single types) and prints a summary table.
+(Only run it for them if they explicitly ask.)
 
-### Step 5 — Verify
+### Step 5 — Verify (after they've run it)
 
-- `GET /api/<plural>` for each type; confirm relations, media, and Markdown bodies are present.
+- `GET /api/<plural>` for each type; confirm relations, media, and Blocks bodies are present.
 - Open a rich-text body and confirm in-text images point at Strapi `/uploads/...` URLs, not
   `images.ctfassets.net`.
-- Re-run the migration — counts stay the same (idempotent via `contentfulId`).
+- Re-running the script leaves counts unchanged (idempotent via `contentfulId`).
 
 ## Strapi v5 rules baked into the tool
 

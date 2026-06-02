@@ -6,7 +6,8 @@
  *  - Responses are flattened: fields live directly on the object, not under
  *    `data.attributes` like in v4.
  *  - Files cannot be uploaded while creating an entry. Upload first (POST
- *    /api/upload), then link the returned file id via the relation `connect`.
+ *    /api/upload), then set the returned numeric file id on the media field
+ *    directly (media is set by id; the relation `connect` form is ignored for media).
  */
 
 export class StrapiClient {
