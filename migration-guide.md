@@ -456,14 +456,7 @@ Either way, the hard parts are the same three we covered here: rich text, assets
 - A New Chapter for Contentful: Scaling Our Vision with Salesforce (Sascha Konietzke, Contentful): https://www.contentful.com/blog/a-new-chapter-for-contentful/
 - Salesforce Signs Definitive Agreement to Acquire Contentful (Salesforce newsroom): https://www.salesforce.com/news/stories/salesforce-signs-definitive-agreement-to-acquire-contentful/
 - Strapi REST API reference: https://docs.strapi.io/cms/api/rest
-- Strapi v5 — use documentId (breaking change): https://docs.strapi.io/cms/migration/v4-to-v5/breaking-changes/use-document-id
-- Strapi v5 — no upload at entry creation (breaking change): https://docs.strapi.io/cms/migration/v4-to-v5/breaking-changes/no-upload-at-entry-creation
-- Strapi v5 — new (flattened) response format: https://docs.strapi.io/cms/migration/v4-to-v5/breaking-changes/new-response-format
 - Strapi Upload API: https://docs.strapi.io/cms/api/rest/upload
 - Strapi — managing relations with the REST API: https://docs.strapi.io/cms/api/rest/relations
-- Contentful — import and export with the CLI: https://www.contentful.com/developers/docs/tutorials/cli/import-and-export/
-- Contentful — scripting migrations: https://www.contentful.com/developers/docs/tutorials/cli/scripting-migrations/
-- Contentful — rich text concepts: https://www.contentful.com/developers/docs/concepts/rich-text/
-- Contentful Management API reference: https://www.contentful.com/developers/docs/references/content-management-api/
 
 <cta title="Get Started in Minutes" text="Run `npx create-strapi-app@latest` in your terminal and follow our Quick Start Guide to build your first Strapi project." buttontext="View Quick Start Guide" buttonlink="__https://docs.strapi.io/cms/quick-start__"></cta>
